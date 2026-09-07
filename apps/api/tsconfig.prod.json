@@ -1,0 +1,10 @@
+{
+    "extends": "./tsconfig.build.json",
+    "compilerOptions": {
+        "rootDir": "./src",
+        "paths": {
+            "@cantina/shared": ["../../packages/shared/dist/index.d.ts"]
+        }
+    },
+    "include": ["src"]
+}

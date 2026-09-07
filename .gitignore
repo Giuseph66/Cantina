@@ -10,6 +10,10 @@ build/
 
 # Environment files
 .env
+.env.production
+/data/
+/secrets/
+/backups/
 .env.local
 .env.*.local
 
