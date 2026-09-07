@@ -41,3 +41,5 @@ Para restaurar, pare API e túnel, restaure banco e uploads de um mesmo backup,
 recupere a imagem correspondente e só então suba os serviços. Não execute
 migrations novas sobre um banco restaurado para uma versão antiga sem revisar
 a compatibilidade.
+
+Planejamento de pagamentos: [migração de Mercado Pago para Asaas](../docs/MIGRACAO_MERCADO_PAGO_ASAAS.md).
