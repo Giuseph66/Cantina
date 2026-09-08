@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "deploy": "bash scripts/deploy-production.sh",
     "prod": "concurrently --kill-others \"npm run prod -w apps/api\" \"npm run prod -w apps/web\"",
     "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev:web:wait\"",
     "dev:web:wait": "node scripts/wait-for-port.cjs 3000 && npm run dev -w apps/web",
