@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { loadMercadoPago } from '@mercadopago/sdk-js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     AlertCircle,
@@ -29,7 +28,11 @@ type PaymentConfig = {
     onlineEnabled: boolean;
     pixEnabled: boolean;
     cardEnabled: boolean;
-    mercadoPagoPublicKey: string | null;
+    cardProvider?: string;
+    cardFlow?: string;
+    sandbox?: boolean;
+    newChargesEnabled?: boolean;
+    salesEnabled?: boolean;
 };
 
 type PaymentResponse = {
@@ -48,17 +51,9 @@ type PaymentResponse = {
     lastFourDigits: string | null;
     statusDetail: string | null;
     receiptUrl: string | null;
-};
-
-type SavedCard = {
-    id: string;
-    lastFourDigits: string | null;
-    brand: string | null;
-    paymentMethodId: string | null;
-    issuerId: string | null;
-    expirationMonth: number | null;
-    expirationYear: number | null;
-    thumbnail: string | null;
+    checkoutUrl?: string | null;
+    creationState?: string;
+    reviewRequired?: boolean;
 };
 
 type CheckoutOrder = {
@@ -127,7 +122,6 @@ export default function CheckoutPage() {
     const { user, updateProfile } = useAuth();
     const resumeOrderId = searchParams.get('orderId');
     const isResumingOrder = !!resumeOrderId;
-    const pode_vender = false; // Mudar para true quando liberar as vendas
 
 
     const [config, setConfig] = useState<PaymentConfig>({
@@ -135,7 +129,6 @@ export default function CheckoutPage() {
         onlineEnabled: true,
         pixEnabled: true,
         cardEnabled: false,
-        mercadoPagoPublicKey: null,
     });
     const [checkoutMethod, setCheckoutMethod] = useState<CheckoutMethod>('ONLINE');
     const [onlineMethod, setOnlineMethod] = useState<OnlineMethod>('PIX');
@@ -151,36 +144,22 @@ export default function CheckoutPage() {
     const [payerEmail, setPayerEmail] = useState(user?.email ?? '');
     const [payerDocument, setPayerDocument] = useState(user?.cpf ?? '');
     const [payerPhone, setPayerPhone] = useState(user?.phone ?? '');
-    const [cardReady, setCardReady] = useState(false);
-    const [cardFormError, setCardFormError] = useState('');
-    const [saveCard, setSaveCard] = useState(true);
-    const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-    const [savedCardsResolved, setSavedCardsResolved] = useState(false);
-    const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null);
-
-    const cardFormRef = useRef<any>(null);
-    const cardSubmitRef = useRef<(() => Promise<void>) | null>(null);
-    const mercadoPagoRef = useRef<any>(null);
-    const savedCardSecurityFieldRef = useRef<any>(null);
     const onlineMethodRef = useRef<OnlineMethod>('PIX');
-    const saveCardRef = useRef(true);
 
     const paymentSummary = latestPayment ?? onlineOrder?.latestPayment ?? null;
+    const pode_vender = config.sandbox || config.salesEnabled === true;
+    const hostedCard = true;
     const activePaymentSummary = paymentSummary && (paymentSummary.paymentMethod === onlineMethod || paymentSummary.status === 'APPROVED')
         ? paymentSummary
         : null;
-    const selectedSavedCard = useMemo(
-        () => savedCards.find(card => card.id === selectedSavedCardId) ?? null,
-        [savedCards, selectedSavedCardId],
-    );
     const documentType = useMemo(() => getDocumentType(payerDocument), [payerDocument]);
     const checkoutUnavailable =
         !pode_vender ||
         (checkoutMethod === 'ONLINE' && !config.onlineEnabled)
         || (checkoutMethod === 'ON_PICKUP' && !config.allowOnPickupPayment);
     const canCreateOrder = !isResumingOrder && items.length > 0 && !creatingOrder && !loadingConfig && !checkoutUnavailable && pode_vender;
-    const canGeneratePix = !!onlineOrder && config.pixEnabled && !processingPayment;
-    const canPayCard = !!onlineOrder && config.cardEnabled && cardReady && !processingPayment;
+    const canGeneratePix = !!onlineOrder && config.pixEnabled && !processingPayment && config.newChargesEnabled !== false;
+    const canPayCard = !!onlineOrder && config.cardEnabled && !processingPayment && config.newChargesEnabled !== false;
 
     function syncOnlineMethod(payment: PaymentResponse | null, preserveSelection = false) {
         if (preserveSelection && payment?.status !== 'APPROVED') {
@@ -240,10 +219,6 @@ export default function CheckoutPage() {
     }, [onlineMethod]);
 
     useEffect(() => {
-        saveCardRef.current = saveCard;
-    }, [saveCard]);
-
-    useEffect(() => {
         api.get<PaymentConfig>('/payments/public-config')
             .then((response) => {
                 setConfig(response);
@@ -299,29 +274,6 @@ export default function CheckoutPage() {
         setPayerDocument(user?.cpf ?? '');
         setPayerPhone(user?.phone ?? '');
     }, [user?.name, user?.email, user?.cpf, user?.phone]);
-
-    useEffect(() => {
-        if (!onlineOrder || onlineMethod !== 'CARD') return;
-
-        setSavedCardsResolved(false);
-        const loadSavedCards = async () => {
-            try {
-                const cards = await api.get<SavedCard[]>('/payments/saved-cards');
-                setSavedCards(cards);
-                if (cards.length > 0) {
-                    setSelectedSavedCardId(cards[0].id);
-                } else {
-                    setSelectedSavedCardId(null);
-                }
-            } catch (err) {
-                console.error('[Checkout] Erro ao carregar cartoes salvos', err);
-            } finally {
-                setSavedCardsResolved(true);
-            }
-        };
-
-        void loadSavedCards();
-    }, [onlineOrder?.id, onlineMethod]);
 
     useEffect(() => {
         if (!onlineOrder) return;
@@ -418,191 +370,6 @@ export default function CheckoutPage() {
         };
     }, [onlineOrder?.id, navigate]);
 
-    useEffect(() => {
-        cardSubmitRef.current = null;
-
-        if (!onlineOrder?.id || onlineMethod !== 'CARD' || !config.cardEnabled || !config.mercadoPagoPublicKey) {
-            setCardReady(false);
-            setCardFormError('');
-            if (savedCardSecurityFieldRef.current) {
-                try { savedCardSecurityFieldRef.current.unmount(); } catch { }
-                savedCardSecurityFieldRef.current = null;
-            }
-            if (cardFormRef.current) {
-                try { cardFormRef.current.unmount(); } catch { }
-                cardFormRef.current = null;
-            }
-            return;
-        }
-
-        if (!savedCardsResolved) {
-            setCardReady(false);
-            setCardFormError('');
-            return;
-        }
-
-        let cancelled = false;
-        const currentOrderId = onlineOrder.id;
-        const currentOrderTotalCents = onlineOrder.totalCents;
-
-        async function setupCardForm() {
-            setCardReady(false);
-            setCardFormError('');
-
-            try {
-                await loadMercadoPago();
-                const sdkWindow = window as Window & { MercadoPago?: any };
-                if (!sdkWindow.MercadoPago) {
-                    throw new Error('SDK do Mercado Pago não carregou corretamente.');
-                }
-
-                if (savedCardSecurityFieldRef.current) {
-                    try { savedCardSecurityFieldRef.current.unmount(); } catch { }
-                    savedCardSecurityFieldRef.current = null;
-                }
-                if (cardFormRef.current) {
-                    try { cardFormRef.current.unmount(); } catch { }
-                    cardFormRef.current = null;
-                }
-
-                const mp = new sdkWindow.MercadoPago(config.mercadoPagoPublicKey, { locale: 'pt-BR' });
-                mercadoPagoRef.current = mp;
-
-                if (selectedSavedCardId) {
-                    const securityField = mp.fields.create('securityCode', {
-                        placeholder: 'CVV',
-                    });
-                    securityField.mount('form-checkout__savedSecurityCode');
-                    savedCardSecurityFieldRef.current = securityField;
-                    setCardReady(true);
-
-                    cardSubmitRef.current = async () => {
-                        setProcessingPayment(true);
-                        setError('');
-
-                        try {
-                            const token = await mp.fields.createCardToken({
-                                cardId: selectedSavedCardId,
-                            });
-
-                            if (!token?.id) {
-                                throw new Error('Token do cartao salvo nao foi gerado. Revise o CVV e tente novamente.');
-                            }
-
-                            const response = await api.post<PaymentResponse>(`/payments/orders/${currentOrderId}/card`, {
-                                cardId: selectedSavedCardId,
-                                cardToken: token.id,
-                                paymentMethodId: selectedSavedCard?.paymentMethodId ?? undefined,
-                                issuerId: selectedSavedCard?.issuerId ?? undefined,
-                            });
-
-                            setLatestPayment(response);
-                            if (response.status === 'APPROVED') {
-                                navigate(`/order/${currentOrderId}`);
-                                return;
-                            }
-
-                            if (response.lastError) {
-                                setError(response.lastError);
-                            }
-                        } finally {
-                            setProcessingPayment(false);
-                        }
-                    };
-
-                    return;
-                }
-
-                const form = mp.cardForm({
-                    amount: String((currentOrderTotalCents / 100).toFixed(2)),
-                    iframe: true,
-                    form: {
-                        id: 'card-payment-form',
-                        cardNumber: { id: 'form-checkout__cardNumber', placeholder: '0000 0000 0000 0000' },
-                        expirationDate: { id: 'form-checkout__expirationDate', placeholder: 'MM/AA' },
-                        securityCode: { id: 'form-checkout__securityCode', placeholder: 'CVV' },
-                        cardholderName: { id: 'form-checkout__cardholderName', placeholder: 'Nome no cartao' },
-                        issuer: { id: 'form-checkout__issuer' },
-                        installments: { id: 'form-checkout__installments' },
-                        identificationType: { id: 'form-checkout__identificationType' },
-                        identificationNumber: { id: 'form-checkout__identificationNumber', placeholder: 'CPF ou CNPJ' },
-                        cardholderEmail: { id: 'form-checkout__cardholderEmail', placeholder: 'voce@exemplo.com' },
-                    },
-                    callbacks: {
-                        onFormMounted: (mountError: unknown) => {
-                            if (cancelled) return;
-                            if (mountError) {
-                                setCardFormError('Nao foi possivel carregar o formulario de cartao.');
-                                return;
-                            }
-                            setCardReady(true);
-                        },
-                        onSubmit: (event: Event) => {
-                            event.preventDefault();
-                            void cardSubmitRef.current?.();
-                        },
-                        onError: () => {
-                            if (!cancelled) {
-                                setCardFormError('Verifique os dados do cartao e tente novamente.');
-                            }
-                        },
-                    },
-                });
-
-                cardFormRef.current = form;
-                cardSubmitRef.current = async () => {
-                    const cardFormData = form.getCardFormData();
-                    if (!cardFormData?.token) {
-                        throw new Error('Token do cartao nao foi gerado. Revise os campos e tente novamente.');
-                    }
-
-                    setProcessingPayment(true);
-                    setError('');
-
-                    try {
-                        const response = await api.post<PaymentResponse>(`/payments/orders/${currentOrderId}/card`, {
-                            cardToken: cardFormData.token,
-                            paymentMethodId: cardFormData.paymentMethodId,
-                            issuerId: cardFormData.issuerId || undefined,
-                            installments: 1,
-                            saveCard: saveCardRef.current,
-                        });
-
-                        setLatestPayment(response);
-                        if (response.status === 'APPROVED') {
-                            navigate(`/order/${currentOrderId}`);
-                            return;
-                        }
-
-                        if (response.lastError) {
-                            setError(response.lastError);
-                        }
-                    } finally {
-                        setProcessingPayment(false);
-                    }
-                };
-            } catch (setupError: any) {
-                if (!cancelled) {
-                    setCardFormError(setupError?.message || 'Erro ao iniciar o pagamento com cartao.');
-                }
-            }
-        }
-
-        void setupCardForm();
-
-        return () => {
-            cancelled = true;
-            if (savedCardSecurityFieldRef.current) {
-                try { savedCardSecurityFieldRef.current.unmount(); } catch { }
-                savedCardSecurityFieldRef.current = null;
-            }
-            if (cardFormRef.current) {
-                try { cardFormRef.current.unmount(); } catch { }
-                cardFormRef.current = null;
-            }
-        };
-    }, [onlineOrder?.id, onlineOrder?.totalCents, onlineMethod, selectedSavedCardId, savedCardsResolved, config.cardEnabled, config.mercadoPagoPublicKey, navigate]);
-
     async function handleCreateOrder() {
         if (!canCreateOrder) return;
         setCreatingOrder(true);
@@ -652,33 +419,37 @@ export default function CheckoutPage() {
 
     async function submitCardPayment() {
         try {
-            if (selectedSavedCardId) {
-                if (!cardReady || !cardSubmitRef.current) {
-                    setError('Formulario do cartao salvo ainda nao esta pronto.');
-                    return;
-                }
-
-                await cardSubmitRef.current();
-                return;
-            }
-
-            if (!cardReady) {
-                setError('Formulario de cartao ainda nao esta pronto.');
-                return;
-            }
-
-            const formElement = document.getElementById('card-payment-form');
-            if (!(formElement instanceof HTMLFormElement)) {
-                setError('Formulario de cartao ainda nao esta pronto.');
-                return;
-            }
-
+            if (!onlineOrder) return;
+            setProcessingPayment(true);
             setError('');
-            formElement.requestSubmit();
+            const payment = await api.post<PaymentResponse>(`/payments/orders/${onlineOrder.id}/card`, {});
+            setLatestPayment(payment);
+            if (payment.status === 'APPROVED') { navigate(`/order/${onlineOrder.id}`); return; }
+            if (payment.checkoutUrl && payment.status === 'PENDING') {
+                const url = new URL(payment.checkoutUrl);
+                const allowed = config.sandbox ? ['sandbox.asaas.com'] : ['asaas.com', 'www.asaas.com'];
+                if (url.protocol !== 'https:' || !allowed.includes(url.hostname) || url.username || url.password) throw new Error('Endereço de pagamento inválido.');
+                window.location.assign(url.href);
+            } else {
+                setError(payment.lastError || 'Estamos verificando o pagamento. Atualize o status em instantes.');
+            }
         } catch (err: any) {
             setError(err?.message || 'Erro ao processar pagamento com cartao.');
+        } finally {
             setProcessingPayment(false);
         }
+    }
+
+    async function cancelPendingPayment() {
+        if (!onlineOrder || processingPayment) return;
+        setProcessingPayment(true);
+        setError('');
+        try {
+            const payment = await api.post<PaymentResponse>(`/payments/orders/${onlineOrder.id}/cancel`, {});
+            setLatestPayment(payment);
+            if (payment.status === 'APPROVED') navigate(`/order/${onlineOrder.id}`);
+        } catch (err: any) { setError(err.message || 'Não foi possível cancelar o pagamento.'); }
+        finally { setProcessingPayment(false); }
     }
 
     function renderOrderReview() {
@@ -1007,107 +778,19 @@ export default function CheckoutPage() {
 
                         {onlineMethod === 'PIX' && renderPixResult()}
 
-                        {onlineMethod === 'CARD' && (
-                            <form id="card-payment-form" className={styles.cardForm}>
-                                {shouldShowProfileFields ? (
-                                    <label className={styles.field}>
-                                        <span>Nome no cartao</span>
-                                        <input
-                                            id="form-checkout__cardholderName"
-                                            className={styles.input}
-                                            defaultValue={payerName}
-                                            onChange={(event) => setPayerName(event.target.value)}
-                                            placeholder="Nome como aparece no cartao"
-                                        />
-                                    </label>
-                                ) : (
-                                    <div style={{ display: 'none' }}>
-                                        <input id="form-checkout__cardholderName" value={payerName} readOnly />
-                                    </div>
-                                )}
-
-                                {savedCards.length > 0 && (
-                                    <div className={styles.savedCardsSection}>
-                                        <div className={styles.savedCardsGrid}>
-                                            {savedCards.map(card => (
-                                                <div
-                                                    key={card.id}
-                                                    className={`${styles.savedCardItem} ${selectedSavedCardId === card.id ? styles.activeSavedCard : ''}`}
-                                                    onClick={() => setSelectedSavedCardId(selectedSavedCardId === card.id ? null : card.id)}
-                                                >
-                                                    <div className={styles.savedCardInfo}>
-                                                        {card.thumbnail && <img src={card.thumbnail} alt={card.brand ?? 'Cartão salvo'} className={styles.cardIcon} />}
-                                                        <span>•••• {card.lastFourDigits}</span>
-                                                    </div>
-                                                    <input type="radio" checked={selectedSavedCardId === card.id} readOnly />
-                                                </div>
-                                            ))}
-                                            <div
-                                                className={`${styles.savedCardItem} ${!selectedSavedCardId ? styles.activeSavedCard : ''}`}
-                                                onClick={() => setSelectedSavedCardId(null)}
-                                            >
-                                                <span>Novo cartão</span>
-                                                <input type="radio" checked={!selectedSavedCardId} readOnly />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {!selectedSavedCardId && (
-                                    <>
-                                        <div className={styles.cardFrameGrid}>
-                                            <div className={styles.frameField}>
-                                                <span>Numero do cartao</span>
-                                                <div id="form-checkout__cardNumber" className={styles.frameInput} />
-                                            </div>
-                                            <div className={styles.frameField}>
-                                                <span>Validade</span>
-                                                <div id="form-checkout__expirationDate" className={styles.frameInput} />
-                                            </div>
-                                            <div className={styles.frameField}>
-                                                <span>CVV</span>
-                                                <div id="form-checkout__securityCode" className={styles.frameInput} />
-                                            </div>
-                                            <div style={{ display: 'none' }}>
-                                                <select id="form-checkout__issuer" />
-                                                <select id="form-checkout__installments" />
-                                            </div>
-                                        </div>
-
-                                        <label className={styles.checkboxField}>
-                                            <input
-                                                type="checkbox"
-                                                checked={saveCard}
-                                                onChange={(e) => setSaveCard(e.target.checked)}
-                                            />
-                                            <span>Salvar este cartão para o próximo pedido</span>
-                                        </label>
-                                    </>
-                                )}
-
-                                {selectedSavedCardId && (
-                                    <div className={styles.savedCardConfirmation}>
-                                        <p>Usando cartão salvo terminado em <strong>{selectedSavedCard?.lastFourDigits}</strong>.</p>
-                                        <div className={styles.cardFrameGrid}>
-                                            <div className={styles.frameField}>
-                                                <span>CVV do cartão salvo</span>
-                                                <div id="form-checkout__savedSecurityCode" className={styles.frameInput} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {cardFormError && (
-                                    <div className={styles.error}>
-                                        <AlertCircle size={18} /> {cardFormError}
-                                    </div>
-                                )}
-                            </form>
+                        {onlineMethod === 'CARD' && hostedCard && (
+                            <div className={styles.statusCard}>
+                                <ShieldCheck size={24} />
+                                <strong>Pagamento seguro com Asaas</strong>
+                                <p>Você informará o cartão na página do Asaas. Depois, volte à Cantina para acompanhar seu pedido.</p>
+                            </div>
                         )}
 
                         {activePaymentSummary && (
                             <div className={styles.statusCard}>
-                                <strong>Status:</strong> {activePaymentSummary.status}
+                                <strong>Status:</strong> {activePaymentSummary.reviewRequired ? 'Em revisão pela cantina'
+                                    : activePaymentSummary.creationState === 'UNKNOWN' || activePaymentSummary.creationState === 'CREATING' ? 'Verificando pagamento — aguarde'
+                                    : ({ PENDING: 'Aguardando pagamento', APPROVED: 'Pagamento aprovado', REJECTED: 'Pagamento não concluído', REFUNDED: 'Estornado', CHARGEBACK: 'Em contestação' } as Record<string, string>)[activePaymentSummary.status] || 'Em análise'}
                             </div>
                         )}
 
@@ -1127,7 +810,7 @@ export default function CheckoutPage() {
                                 </button>
                             ) : (
                                 <button type="button" className={styles.confirmBtn} disabled={!canPayCard || savingProfile} onClick={submitCardPayment}>
-                                    {processingPayment ? <><Loader2 size={20} className={styles.spin} /> Processando...</> : savingProfile ? <><Loader2 size={20} className={styles.spin} /> Salvando perfil...</> : 'Pagar com cartao'}
+                                    {processingPayment ? <><Loader2 size={20} className={styles.spin} /> Processando...</> : savingProfile ? <><Loader2 size={20} className={styles.spin} /> Salvando perfil...</> : 'Continuar no Asaas'}
                                 </button>
                             )}
                         </div>
@@ -1135,6 +818,11 @@ export default function CheckoutPage() {
                         <button type="button" className={styles.ghostWideBtn} onClick={() => void reconcileOnlineOrder(onlineOrder.id)}>
                             Atualizar status do pagamento
                         </button>
+                        {paymentSummary?.provider === 'ASAAS' && paymentSummary.status === 'PENDING' && (
+                            <button type="button" className={styles.ghostWideBtn} disabled={processingPayment} onClick={cancelPendingPayment}>
+                                Cancelar pagamento para trocar o meio
+                            </button>
+                        )}
                     </div>
                 </section>
             </>
@@ -1171,6 +859,7 @@ export default function CheckoutPage() {
     return (
         <div className={styles.page}>
             <main className={styles.content}>
+                {config.sandbox && <div className={styles.statusCard} role="status"><strong>Ambiente de testes</strong><p>Pagamentos simulados. Nenhum valor real será cobrado.</p></div>}
                 <div className={styles.titleBlock} style={{ marginBottom: '2rem', textAlign: 'center' }}>
                     <h1 className={styles.title}>{onlineOrder ? 'Pagamento' : 'Pedido'}</h1>
                     <p className={styles.subtitle}>

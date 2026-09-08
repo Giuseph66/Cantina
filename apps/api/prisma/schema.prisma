@@ -34,7 +34,7 @@ model User {
   role          String    @default("CLIENT")
   isActive      Boolean   @default(true) @map("is_active")
   lastLoginAt   DateTime? @map("last_login_at")
-  mercadoPagoCustomerId String? @map("mercado_pago_customer_id")
+  legacyPaymentCustomerRef String? @map("mercado_pago_customer_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -162,7 +162,15 @@ model PaymentTransaction {
   provider           String
   paymentMethod      String    @map("payment_method")
   status             String    @default("PENDING")
-  externalId         String?   @unique @map("external_id")
+  externalId         String?   @map("external_id")
+  gatewayEnvironment String?   @map("gateway_environment")
+  gatewayAccountRef  String?   @map("gateway_account_ref")
+  creationState      String    @default("CREATED") @map("creation_state")
+  activeOrderId      String?   @unique @map("active_order_id")
+  providerStatus     String?   @map("provider_status")
+  refundedAmountCents Int      @default(0) @map("refunded_amount_cents")
+  reviewReason       String?   @map("review_reason")
+  nextReconcileAt    DateTime? @map("next_reconcile_at")
   externalReference  String?   @map("external_reference")
   attemptKey         String?   @map("attempt_key")
   gatewayRequestId   String?   @map("gateway_request_id")
@@ -186,7 +194,43 @@ model PaymentTransaction {
   @@index([orderId, status])
   @@index([externalReference])
   @@index([attemptKey])
+  @@unique([provider, gatewayEnvironment, gatewayAccountRef, externalId])
+  @@index([provider, nextReconcileAt])
   @@map("payment_transactions")
+}
+
+model AsaasCustomer {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  environment   String
+  accountRef    String   @map("account_ref")
+  externalId    String?  @map("external_id")
+  creationState String   @default("CREATING") @map("creation_state")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, environment, accountRef])
+  @@unique([environment, accountRef, externalId])
+  @@map("asaas_customers")
+}
+
+model AsaasWebhookInbox {
+  id             String   @id @default(uuid())
+  environment    String
+  accountRef     String   @map("account_ref")
+  eventKey       String   @map("event_key")
+  eventType      String   @map("event_type")
+  paymentId      String   @map("payment_id")
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now()) @map("next_attempt_at")
+  lastError      String?  @map("last_error")
+  createdAt      DateTime @default(now()) @map("created_at")
+  processedAt    DateTime? @map("processed_at")
+
+  @@unique([environment, accountRef, eventKey])
+  @@index([status, nextAttemptAt])
+  @@map("asaas_webhook_inbox")
 }
 
 model PaymentWebhookEvent {

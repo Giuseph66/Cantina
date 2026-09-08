@@ -1,16 +1,22 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Headers, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Headers, UseGuards, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { CreateCardPaymentDto, CreatePixPaymentDto } from './dto/payment.dto';
-import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { CsrfGuard } from '../common/guards/csrf.guard';
+import { AsaasPaymentsService } from './asaas-payments.service';
 
 @Controller()
 export class PaymentsController {
-    constructor(private readonly paymentsService: PaymentsService) { }
+    constructor(private readonly paymentsService: PaymentsService, private readonly asaas: AsaasPaymentsService) { }
+
+    @Post('webhooks/asaas')
+    @HttpCode(200)
+    asaasWebhook(@Headers('asaas-access-token') token: string | undefined, @Body() body: Record<string, unknown>) {
+        return this.asaas.receiveWebhook(token, body);
+    }
 
     @Get('payments/public-config')
     getPublicConfig() {
@@ -38,39 +44,11 @@ export class PaymentsController {
         return this.paymentsService.reconcileOrderPayment(orderId, user.id, user.role);
     }
 
-    @Get('payments/saved-cards')
-    @UseGuards(JwtAuthGuard)
-    listSavedCards(@CurrentUser() user: User) {
-        return this.paymentsService.listSavedCards(user.id);
+    @Post('payments/orders/:orderId/cancel')
+    @UseGuards(JwtAuthGuard, CsrfGuard)
+    @Throttle({ default: { ttl: 60000, limit: 8 } })
+    cancelPayment(@Param('orderId') orderId: string, @CurrentUser() user: User) {
+        return this.paymentsService.cancelPendingPayment(orderId, user.id, user.role);
     }
 
-    @Post('webhooks/mercadopago')
-    async mercadoPagoWebhook(
-        @Headers('x-webhook-secret') webhookSecretHeader: string | undefined,
-        @Headers('x-signature') signature: string | undefined,
-        @Headers('x-request-id') requestId: string | undefined,
-        @Query('webhookSecret') webhookSecretQuery: string | undefined,
-        @Body() body: Record<string, any>,
-        @Query() query: Record<string, string | undefined>,
-    ) {
-        return this.paymentsService.handleMercadoPagoWebhook(
-            webhookSecretHeader ?? webhookSecretQuery,
-            signature,
-            requestId,
-            body,
-            query,
-        );
-    }
-
-    @Post('webhooks/abacatepay')
-    async abacatePayWebhook(
-        @Headers('x-webhook-secret') webhookSecretHeader: string | undefined,
-        @Query('webhookSecret') webhookSecretQuery: string | undefined,
-        @Headers('x-webhook-signature') signature: string | undefined,
-        @Req() req: Request & { rawBody?: Buffer },
-        @Body() body: Record<string, any>,
-    ) {
-        const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body ?? {});
-        return this.paymentsService.handleAbacatePayWebhook(webhookSecretHeader ?? webhookSecretQuery, signature, rawBody, body);
-    }
 }
