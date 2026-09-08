@@ -1,4 +1,5 @@
 import { useState, FormEvent, useEffect, useMemo, useRef } from 'react';
+import { encryptedFetch as fetch } from '../lib/encrypted-fetch';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Eye, EyeOff, ArrowRight, ChevronLeft } from 'lucide-react';

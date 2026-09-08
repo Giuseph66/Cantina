@@ -40,6 +40,7 @@ apps/api/prisma/dev.db
 coverage/
 .vercel
 .env*.local
+*.tsbuildinfo
 
 
 cantina-22dd3-firebase-adminsdk-fbsvc-63e1e6d12a.json

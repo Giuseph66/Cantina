@@ -1,9 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { payloadCrypto } from './common/payload-crypto';
 
 async function bootstrap() {
-    const app = await NestFactory.create(AppModule, {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
         bufferLogs: true,
         rawBody: true,
     });
@@ -17,7 +19,10 @@ async function bootstrap() {
     app.enableCors({
         origin: corsOrigins,
         credentials: true,
+        exposedHeaders: ['X-Payload-Encrypted'],
     });
+    app.useBodyParser('json', { limit: '128kb' });
+    app.use(payloadCrypto());
 
     // Global validation pipe
     app.useGlobalPipes(

@@ -1,4 +1,5 @@
 import { appendCsrfHeader } from '../lib/csrf';
+import { encryptedFetch as fetch } from '../lib/encrypted-fetch';
 
 const BASE = '/api/v1';
 

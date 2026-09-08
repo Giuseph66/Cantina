@@ -7,6 +7,7 @@ import {
     useEffect,
 } from 'react';
 import { appendCsrfHeader } from '../lib/csrf';
+import { encryptedFetch as fetch } from '../lib/encrypted-fetch';
 
 export interface AuthUser {
     id: string;

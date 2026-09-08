@@ -4,6 +4,8 @@
     "description": "Cantina API — NestJS + Prisma",
     "private": true,
     "scripts": {
+        "prod": "npm run build:prod && NODE_ENV=production node --env-file=.env.production dist/main.js",
+        "build:prod": "npm run build -w @cantina/shared && prisma generate && tsc -p tsconfig.prod.json",
         "prebuild": "prisma generate",
         "build": "nest build",
         "format": "prettier --write \"src/**/*.ts\"",
