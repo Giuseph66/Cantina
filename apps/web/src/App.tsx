@@ -4,7 +4,9 @@ import { CartProvider } from './contexts/CartContext';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { OfflineStorage } from './services/OfflineStorage';
 import { useApi } from './hooks/useApi';
-import { useEffect } from 'react';
+import ServerDownScreen from './components/ServerDownScreen';
+import { onRecovered } from './lib/server-status';
+import { useEffect, useState } from 'react';
 
 // Pages — Auth
 import LoginPage from './pages/LoginPage';
@@ -89,48 +91,70 @@ function GlobalSyncWorker() {
     return null;
 }
 
+const routes = (
+    <>
+    <Route path="/login" element={<LoginPage />} />
+    <Route path="/register" element={<RegisterPage />} />
+    <Route element={<ClientLayout />}>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/menu" element={<MenuPage />} />
+        <Route path="/pedido" element={<ProtectedRoute roles={['CLIENT']}><CheckoutPage /></ProtectedRoute>} />
+        <Route path="/checkout" element={<Navigate to="/pedido" replace />} />
+        <Route path="/order/:orderId" element={<ProtectedRoute roles={['CLIENT']}><OrderConfirmedPage /></ProtectedRoute>} />
+        <Route path="/orders" element={<ProtectedRoute roles={['CLIENT']}><MyOrdersPage /></ProtectedRoute>} />
+        <Route path="/minha-conta" element={<ProtectedRoute roles={['CLIENT']}><ClientDashboardPage /></ProtectedRoute>} />
+    </Route>
+
+    {/* CASHIER */}
+    <Route path="/cashier/scan" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><ScannerPage /></ProtectedRoute>} />
+    <Route path="/cashier/validate" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><ValidationDetailPage /></ProtectedRoute>} />
+    <Route path="/cashier/counter" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CounterSalePage /></ProtectedRoute>} />
+    <Route path="/cashier/credit-notes" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CreditNotesPage /></ProtectedRoute>} />
+    <Route path="/cashier/cash-open" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CashOpenPage /></ProtectedRoute>} />
+    <Route path="/cashier/cash-close" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CashClosePage /></ProtectedRoute>} />
+
+    {/* ADMIN */}
+    <Route path="/admin" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+    <Route path="/admin/categories" element={<Navigate to="/admin" replace />} />
+    <Route path="/admin/products" element={<ProtectedRoute roles={['ADMIN']}><ProductsPage /></ProtectedRoute>} />
+    <Route path="/admin/orders" element={<ProtectedRoute roles={['ADMIN']}><OrdersPage /></ProtectedRoute>} />
+    <Route path="/admin/reports" element={<ProtectedRoute roles={['ADMIN']}><ReportsPage /></ProtectedRoute>} />
+    <Route path="/admin/settings" element={<ProtectedRoute roles={['ADMIN']}><SettingsPage /></ProtectedRoute>} />
+    <Route path="/admin/users" element={<ProtectedRoute roles={['ADMIN']}><UsersPage /></ProtectedRoute>} />
+
+    {/* Totem Cozinha/Painel */}
+    <Route path="/totem" element={<TotemPage />} />
+
+    <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+    </>
+);
+
+/**
+ * Remonta a árvore de rotas quando o servidor volta.
+ * Sem isso a tela de espera some e a página fica com os dados vazios da
+ * requisição que falhou. Auth e Cart ficam acima daqui, então sessão e
+ * carrinho sobrevivem à remontagem.
+ */
+function useReconnectKey() {
+    const [key, setKey] = useState(0);
+    useEffect(() => onRecovered(() => setKey(current => current + 1)), []);
+    return key;
+}
+
+function AppRoutes() {
+    const reconnectKey = useReconnectKey();
+    return <Routes key={reconnectKey}>{routes}</Routes>;
+}
+
 export default function App() {
     return (
         <AuthProvider>
             <CartProvider>
                 <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                     <GlobalSyncWorker />
-                    <Routes>
-                        <Route path="/login" element={<LoginPage />} />
-                        <Route path="/register" element={<RegisterPage />} />
-                        <Route element={<ClientLayout />}>
-                            <Route path="/" element={<LandingPage />} />
-                            <Route path="/menu" element={<MenuPage />} />
-                            <Route path="/pedido" element={<ProtectedRoute roles={['CLIENT']}><CheckoutPage /></ProtectedRoute>} />
-                            <Route path="/checkout" element={<Navigate to="/pedido" replace />} />
-                            <Route path="/order/:orderId" element={<ProtectedRoute roles={['CLIENT']}><OrderConfirmedPage /></ProtectedRoute>} />
-                            <Route path="/orders" element={<ProtectedRoute roles={['CLIENT']}><MyOrdersPage /></ProtectedRoute>} />
-                            <Route path="/minha-conta" element={<ProtectedRoute roles={['CLIENT']}><ClientDashboardPage /></ProtectedRoute>} />
-                        </Route>
-
-                        {/* CASHIER */}
-                        <Route path="/cashier/scan" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><ScannerPage /></ProtectedRoute>} />
-                        <Route path="/cashier/validate" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><ValidationDetailPage /></ProtectedRoute>} />
-                        <Route path="/cashier/counter" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CounterSalePage /></ProtectedRoute>} />
-                        <Route path="/cashier/credit-notes" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CreditNotesPage /></ProtectedRoute>} />
-                        <Route path="/cashier/cash-open" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CashOpenPage /></ProtectedRoute>} />
-                        <Route path="/cashier/cash-close" element={<ProtectedRoute roles={['CASHIER', 'ADMIN']}><CashClosePage /></ProtectedRoute>} />
-
-                        {/* ADMIN */}
-                        <Route path="/admin" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
-                        <Route path="/admin/categories" element={<Navigate to="/admin" replace />} />
-                        <Route path="/admin/products" element={<ProtectedRoute roles={['ADMIN']}><ProductsPage /></ProtectedRoute>} />
-                        <Route path="/admin/orders" element={<ProtectedRoute roles={['ADMIN']}><OrdersPage /></ProtectedRoute>} />
-                        <Route path="/admin/reports" element={<ProtectedRoute roles={['ADMIN']}><ReportsPage /></ProtectedRoute>} />
-                        <Route path="/admin/settings" element={<ProtectedRoute roles={['ADMIN']}><SettingsPage /></ProtectedRoute>} />
-                        <Route path="/admin/users" element={<ProtectedRoute roles={['ADMIN']}><UsersPage /></ProtectedRoute>} />
-
-                        {/* Totem Cozinha/Painel */}
-                        <Route path="/totem" element={<TotemPage />} />
-
-                        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
+                    <ServerDownScreen />
+                    <AppRoutes />
                 </BrowserRouter>
             </CartProvider>
         </AuthProvider>

@@ -12,8 +12,8 @@ export function payloadCrypto(): RequestHandler {
             res.json({ version: 1, spki });
             return;
         }
-        // Provider callbacks and binary files are transported using HTTPS directly.
-        if (req.path === '/api/v1/webhooks/asaas' || req.path.startsWith('/api/v1/uploads')) return next();
+        // Provider callbacks, binary files and the liveness probe are transported using HTTPS directly.
+        if (req.path === '/api/v1/webhooks/asaas' || req.path.startsWith('/api/v1/uploads') || req.path === '/api/v1/health') return next();
         const wrappedKey = req.get('x-payload-key');
         if (!wrappedKey) {
             if (process.env.PAYLOAD_ENCRYPTION_REQUIRED === 'true') {

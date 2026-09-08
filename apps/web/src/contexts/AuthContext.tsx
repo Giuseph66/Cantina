@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { appendCsrfHeader } from '../lib/csrf';
 import { encryptedFetch as fetch } from '../lib/encrypted-fetch';
+import { onRecovered, reportFailure, reportResponse } from '../lib/server-status';
 
 export interface AuthUser {
     id: string;
@@ -55,6 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             credentials: 'include',
         });
 
+        // Primeira requisição da aplicação: é ela que revela um servidor fora do ar no boot.
+        reportResponse(res);
+
         if (res.status === 401) {
             setUser(null);
             return;
@@ -72,12 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshSession()
             .catch((err) => {
                 console.error('[Auth] Falha ao restaurar sessao', err);
+                reportFailure(err);
                 setUser(null);
             })
             .finally(() => {
                 setIsLoading(false);
             });
     }, [refreshSession]);
+
+    // O provider fica acima das rotas e não remonta na reconexão: revalida a sessão na mão.
+    useEffect(() => onRecovered(() => {
+        refreshSession().catch(() => setUser(null));
+    }), [refreshSession]);
 
     const login = useCallback(async (email: string, password: string) => {
         const normalizedEmail = email.trim().toLowerCase();

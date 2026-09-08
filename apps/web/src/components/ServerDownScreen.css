@@ -1,0 +1,178 @@
+.server-down {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--bg-main);
+    background-image:
+        radial-gradient(at 10% 0%, var(--primary-glow) 0px, transparent 55%),
+        radial-gradient(at 90% 100%, var(--primary-glow) 0px, transparent 55%);
+    animation: server-down-in var(--transition-normal);
+}
+
+@keyframes server-down-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.server-down__card {
+    width: min(30rem, 100%);
+    padding: 2.5rem 2rem;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+}
+
+.server-down__cup {
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0 auto 1.25rem;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-full);
+    background: var(--primary-glow);
+    color: var(--primary);
+    animation: server-down-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes server-down-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.06); opacity: 0.75; }
+}
+
+.server-down__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.server-down__text {
+    margin: 0 0 1.5rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+.server-down__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+}
+
+.server-down__bar {
+    height: 4px;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+    border-radius: var(--radius-full);
+    background: var(--primary-glow);
+}
+
+.server-down__bar span {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: var(--primary);
+    transition: width 1s linear;
+}
+
+.server-down__bar--indeterminate span {
+    width: 35%;
+    animation: server-down-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes server-down-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+}
+
+.server-down__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.server-down__btn {
+    padding: 0.8rem 1.2rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.server-down__btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.server-down__btn--primary {
+    color: #fff;
+    background: var(--primary);
+}
+
+.server-down__btn--primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.server-down__btn--ghost {
+    color: var(--text-muted);
+    background: transparent;
+    border-color: var(--glass-border);
+}
+
+.server-down__btn--ghost:hover:not(:disabled) {
+    color: var(--primary);
+    border-color: var(--primary-light);
+}
+
+.server-down__note {
+    margin: 1.25rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-dim);
+}
+
+.server-back {
+    position: fixed;
+    left: 50%;
+    bottom: 1.5rem;
+    z-index: 9999;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.1rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-main);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-md);
+    animation: server-back-in var(--transition-normal);
+}
+
+@keyframes server-back-in {
+    from { opacity: 0; transform: translate(-50%, 0.75rem); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .server-down,
+    .server-down__cup,
+    .server-down__bar--indeterminate span,
+    .server-back {
+        animation: none;
+    }
+}
