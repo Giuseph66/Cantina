@@ -1227,3 +1227,11 @@
         font-size: 1.25rem;
     }
 }
+
+.mobileOperations { display: none; }
+@media (max-width: 768px) {
+    .mobileOperations { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: #fffdfb; border-top: 1px solid #e8ddd5; padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom)); }
+    .mobileOperations button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; min-height: 52px; border: 0; border-radius: 10px; background: transparent; color: #5d4037; font: inherit; font-size: 0.8rem; font-weight: 700; }
+    .mobileOperations button[aria-current="page"] { background: #f3e5d6; color: #3e2723; }
+    .main { padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
+}

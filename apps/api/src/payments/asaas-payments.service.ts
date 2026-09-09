@@ -7,6 +7,7 @@ import { AsaasClient, AsaasPayment, AsaasRequestError } from './asaas.client';
 
 const CLOSED_ORDERS = ['CANCELLED', 'EXPIRED'];
 const PAYABLE_ORDERS = ['CREATED', 'CONFIRMED'];
+const MIN_CARD_PAYMENT_CENTS = 500;
 type Payer = { id: string; name: string; email: string; cpf: string | null; phone: string | null };
 
 @Injectable()
@@ -31,6 +32,9 @@ export class AsaasPaymentsService {
         const reserved = await this.prisma.$transaction(async tx => {
             const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, ticket: true } });
             if (!PAYABLE_ORDERS.includes(order.status)) throw new ConflictException('Este pedido não aceita novos pagamentos.');
+            if (method === 'CARD' && order.totalCents < MIN_CARD_PAYMENT_CENTS) {
+                throw new BadRequestException('O pagamento com cartão exige pedido mínimo de R$ 5,00. Use Pix ou adicione mais itens.');
+            }
             const existing = await tx.paymentTransaction.findFirst({
                 where: { orderId, OR: [{ status: 'PENDING' }, { activeOrderId: orderId }] }, orderBy: { createdAt: 'asc' },
             });

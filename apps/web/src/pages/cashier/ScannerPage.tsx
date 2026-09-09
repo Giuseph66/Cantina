@@ -29,7 +29,7 @@ export default function ScannerPage() {
     const navigate = useNavigate();
     const api = useApi();
 
-    const [mode, setMode] = useState<'QR' | 'MANUAL'>('QR');
+    const [mode, setMode] = useState<'QR' | 'MANUAL'>('MANUAL');
     const [shortCode, setShortCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -128,7 +128,7 @@ export default function ScannerPage() {
     }
 
     return (
-        <CashierLayout title="Scanner / Validação" subtitle="Leitura de QR Code e validação de tickets">
+        <CashierLayout title="Entregar pedido" subtitle="Digite o código ou leia o QR do aluno. Confira os itens antes de entregar.">
             <div className={styles.card}>
                 <div className={`${styles.statusBar} ${isOnline ? styles.statusOnline : styles.statusOffline}`}>
                     {isOnline ? <Wifi size={18} strokeWidth={2.4} /> : <WifiOff size={18} strokeWidth={2.4} />}
@@ -136,7 +136,7 @@ export default function ScannerPage() {
                         <strong>{isOnline ? 'Online e sincronizado' : 'Offline no aparelho'}</strong>
                         <span>
                             {isOnline
-                                ? 'A validacao consulta a nuvem e libera a retirada em tempo real.'
+                                ? 'Confira o pedido antes de confirmar a entrega.'
                                 : 'A retirada sera validada localmente e sincronizada depois.'}
                         </span>
                     </div>
@@ -147,13 +147,13 @@ export default function ScannerPage() {
                         className={`${styles.tab} ${mode === 'QR' ? styles.activeTab : ''}`}
                         onClick={() => setMode('QR')}
                     >
-                        <Camera size={20} strokeWidth={2.5} /> CÂMERA SCANNER
+                        <Camera size={20} strokeWidth={2.5} /> Ler QR Code
                     </button>
                     <button
                         className={`${styles.tab} ${mode === 'MANUAL' ? styles.activeTab : ''}`}
                         onClick={() => setMode('MANUAL')}
                     >
-                        <Keyboard size={20} strokeWidth={2.5} /> TECLADO MANUAL
+                        <Keyboard size={20} strokeWidth={2.5} /> Digitar código
                     </button>
                 </div>
 
@@ -165,7 +165,7 @@ export default function ScannerPage() {
                                 <p className={styles.modeCopy}>Posicione o codigo dentro da moldura e mantenha o aparelho firme por alguns segundos.</p>
                             </div>
                             <p className={styles.instruction}>
-                                {loading ? 'Processando QRCode...' : 'Aponte a câmera para o QR Code do ticket ou boleto Pix.'}
+                                {loading ? 'Processando QRCode...' : 'Aponte a câmera para o QR Code de retirada do aluno.'}
                             </p>
                             <div className={styles.cameraViewport}>
                                 <QrReader
@@ -209,21 +209,22 @@ export default function ScannerPage() {
                         <form onSubmit={handleManualSubmit} className={styles.manualForm}>
                             <div className={styles.modeHeader}>
                                 <span className={styles.modePill}>Entrada manual</span>
-                                <p className={styles.modeCopy}>Use este modo quando a camera nao conseguir ler o ticket ou quando o caixa receber apenas o codigo curto.</p>
+                                <p className={styles.modeCopy}>Peça ao aluno o código de retirada exibido em Meus pedidos.</p>
                             </div>
-                            <label className={styles.label}>Código Curto do Ticket</label>
+                            <label htmlFor="pickup-code" className={styles.label}>Código de retirada</label>
                             <input
+                                id="pickup-code"
+                                autoComplete="off"
                                 type="text"
                                 value={shortCode}
                                 onChange={(e) => setShortCode(e.target.value.toUpperCase())}
                                 placeholder="EX: A7KF29"
                                 className={styles.input}
                                 maxLength={6}
-                                autoFocus
                             />
-                            <p className={styles.manualHint}>Digite os 6 caracteres exatamente como aparecem no ticket.</p>
-                            <button type="submit" className={styles.submitBtn} disabled={shortCode.length < 5}>
-                                Validar Código
+                            <p className={styles.manualHint}>Digite as 6 letras e números do código de retirada.</p>
+                            <button type="submit" className={styles.submitBtn} disabled={loading || shortCode.trim().length !== 6}>
+                                {loading ? 'Buscando pedido...' : 'Conferir pedido'}
                             </button>
                             {error && <p className={styles.error}>{error}</p>}
                         </form>

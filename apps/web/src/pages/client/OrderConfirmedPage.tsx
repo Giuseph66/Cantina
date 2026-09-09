@@ -174,9 +174,10 @@ export default function OrderConfirmedPage() {
     const isAwaitingPayment = orderInfo.status === 'CREATED';
     const isOnlinePayment = orderInfo.paymentMethod === 'ONLINE' || orderInfo.paymentMethod === 'PIX' || orderInfo.paymentMethod === 'CARD';
     const pendingPayment = isAwaitingPayment ? orderInfo.latestPayment : null;
+    const isReadyForPickup = orderInfo.status === 'READY';
 
     let HeaderIcon = <CheckCircle2 size={42} strokeWidth={2.5} color="var(--secondary)" />;
-    let headerTitle = 'Pedido Confirmado';
+    let headerTitle = orderInfo.status === 'READY' ? 'Pronto para retirar' : ['PAID', 'IN_PREP'].includes(orderInfo.status) ? 'Pago · aguardando separação' : 'Pedido confirmado';
     let statusColor = 'var(--secondary)';
 
     if (isConsumed) {
@@ -246,7 +247,7 @@ export default function OrderConfirmedPage() {
                 <div className={styles.ticketColumn}>
                     <div className={styles.card}>
                         <div className={styles.qrContainer}>
-                            <div className={`${styles.qrWrapper} ${(isConsumed || isExpired || isAwaitingPayment) ? styles.disabledQr : ''}`}>
+                            <div className={`${styles.qrWrapper} ${(!isReadyForPickup || isConsumed || isExpired) ? styles.disabledQr : ''}`}>
                                 <QRCodeSVG
                                     value={ticket.codeShort}
                                     size={220}
@@ -255,24 +256,31 @@ export default function OrderConfirmedPage() {
                                     fgColor="var(--primary)"
                                 />
                             </div>
-                            {(isConsumed || isExpired || isAwaitingPayment) && (
+                            {(!isReadyForPickup || isConsumed || isExpired) && (
                                 <div className={styles.qrOverlay} style={{ color: statusColor, borderColor: `${statusColor}40` }}>
-                                    {isAwaitingPayment ? 'Bloqueado' : isExpired ? 'Expirado' : 'Consumido'}
+                                    {isAwaitingPayment ? 'Bloqueado' : isExpired ? 'Expirado' : isConsumed ? 'Consumido' : 'Em separação'}
                                 </div>
                             )}
-                            <p className={styles.qrHelper}>Apresente este QR no balcao</p>
+                            <p className={styles.qrHelper}>{isReadyForPickup ? 'Mostre este QR Code no balcão' : 'O QR Code será liberado quando seu pedido estiver separado'}</p>
                         </div>
 
                         <div className={styles.codeDiv}>
-                            <p className={styles.codeHelper}>Codigo de Retirada</p>
-                            <div className={styles.shortCode}>{ticket.codeShort}</div>
+                            <p className={styles.codeHelper}>Código de retirada</p>
+                            {isReadyForPickup ? (
+                                <>
+                                    <div className={styles.shortCode}>{ticket.codeShort}</div>
+                                    <p className={styles.qrHelper}>Você também pode informar seu nome e este código. Confira os lanches antes de sair.</p>
+                                </>
+                            ) : (
+                                <p className={styles.qrHelper}>Acompanhe o status nesta tela. O código aparecerá quando estiver pronto para retirada.</p>
+                            )}
                         </div>
 
                         <div className={styles.infoDiv}>
                             <div className={styles.infoRow}>
                                 <Clock size={16} strokeWidth={2.5} />
                                 <span>
-                                    Valido ate: {format(new Date(ticket.expiresAt), "HH:mm 'de' dd/MM", { locale: ptBR })}
+                                    Válido até: {format(new Date(ticket.expiresAt), "HH:mm 'de' dd/MM", { locale: ptBR })}
                                 </span>
                             </div>
                         </div>

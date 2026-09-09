@@ -88,11 +88,13 @@ export default function MenuPage() {
                         {cartQty > 0 ? (
                             <div className={styles.qtyControls}>
                                 <button type="button" className={styles.qtyBtn}
+                                    aria-label={`Remover uma unidade de ${p.name}`}
                                     onClick={() => setQty(p.id, cartQty - 1)}>
                                     <Minus size={24} strokeWidth={3} />
                                 </button>
                                 <span className={styles.qtyValue}>{cartQty}</span>
                                 <button type="button" className={styles.qtyBtn}
+                                    aria-label={`Adicionar mais uma unidade de ${p.name}`}
                                     onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents })}
                                     disabled={isUnavailable}>
                                     <Plus size={24} strokeWidth={3} />
@@ -100,6 +102,7 @@ export default function MenuPage() {
                             </div>
                         ) : (
                             <button className={styles.addBtn}
+                                aria-label={`Adicionar ${p.name} ao pedido`}
                                 onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents })}
                                 disabled={isUnavailable}>
                                 <Plus size={28} strokeWidth={3} />

@@ -638,3 +638,14 @@
         padding-inline: 0.85rem;
     }
 }
+
+@media (max-width: 640px) {
+    .cashCloseHero .iconWrapperOut, .heroEyebrow { display: none; }
+    .cashCloseMain .infoBlock { padding: 0.75rem; }
+    .summaryGrid { gap: 0; border-block: 1px solid var(--glass-border); }
+    .summaryCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 0.75rem; border: 0; border-radius: 0; background: transparent; }
+    .summaryCaption { grid-column: 1 / -1; }
+    .label { text-transform: none; letter-spacing: normal; font-size: 1rem; }
+    .btnSubmitRed { position: static; text-transform: none; box-shadow: none; }
+    .textarea { font-size: 1rem; }
+}

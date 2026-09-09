@@ -32,8 +32,8 @@ type StatusConfig = { label: string; sublabel: string; color: string; bg: string
 const STATUS_MAP: Record<string, StatusConfig> = {
     CREATED: { label: 'Aguardando pagamento', sublabel: 'Conclua o pagamento para confirmar seu pedido', color: '#b45309', bg: '#fef3c7', icon: Hourglass, isActive: true },
     CONFIRMED: { label: 'Aguardando retirada', sublabel: 'Seu pedido foi confirmado. Retire no balcão', color: '#0369a1', bg: '#e0f2fe', icon: Clock, isActive: true },
-    PAID: { label: 'Pronto para retirada', sublabel: 'Apresente o QR Code no balcão para retirar', color: '#059669', bg: '#d1fae5', icon: QrCode, isActive: true },
-    IN_PREP: { label: 'Em preparo', sublabel: 'A cozinha está preparando seu pedido', color: '#7c3aed', bg: '#ede9fe', icon: ChefHat, isActive: true },
+    PAID: { label: 'Pagamento confirmado', sublabel: 'Seu pedido entrou na fila de separação', color: '#7c3aed', bg: '#ede9fe', icon: Clock, isActive: true },
+    IN_PREP: { label: 'Em separação', sublabel: 'A cantina está separando seus lanches', color: '#7c3aed', bg: '#ede9fe', icon: ChefHat, isActive: true },
     READY: { label: 'Pronto! Retire agora', sublabel: 'Seu pedido está pronto no balcão', color: '#059669', bg: '#d1fae5', icon: PackageCheck, isActive: true },
     PICKED_UP: { label: 'Entregue', sublabel: 'Pedido retirado com sucesso', color: '#64748b', bg: '#f1f5f9', icon: CheckCircle2, isActive: false },
     EXPIRED: { label: 'Expirado', sublabel: 'O prazo de retirada deste pedido expirou', color: '#94a3b8', bg: '#f8fafc', icon: AlertCircle, isActive: false },
@@ -54,7 +54,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         label: order.status, sublabel: '', color: 'var(--text-dim)', bg: 'var(--bg-main)', icon: Clock, isActive: false,
     };
     const Icon = s.icon;
-    const showQrBtn = ['CONFIRMED', 'PAID', 'READY'].includes(order.status) && order.ticket;
+    const showQrBtn = order.status === 'READY' && order.ticket;
 
     return (
         <div

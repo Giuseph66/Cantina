@@ -613,3 +613,70 @@
         width: 100%;
     }
 }
+
+.searchField {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: #5d4037;
+    font-weight: 700;
+}
+.searchField input, .searchField select {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 0.75rem;
+    border: 1px solid #d5c4b8;
+    border-radius: 10px;
+    background: #fffdfb;
+    color: #3e2723;
+    font: inherit;
+}
+.error { padding: 1rem; background: #fff1ed; color: #9b3024; border-radius: 10px; }
+.filterHeader, .sectionHeader { cursor: pointer; min-height: 44px; }
+.filterBlock[open] .filterRow { margin-top: 0.75rem; }
+.filterBlock[open] .quickFilters { margin-top: 0.75rem; }
+.filterHeader::after, .sectionHeader::after { content: '+'; margin-left: auto; }
+[open] > .filterHeader::after, [open] > .sectionHeader::after { content: '−'; }
+.tab, .quickBtn, .actionBtn, .refreshBtn { min-height: 44px; }
+.searchField :focus-visible, .tab:focus-visible, .actionBtn:focus-visible, summary:focus-visible {
+    outline: 3px solid #9a5f2b;
+    outline-offset: 3px;
+}
+@media (max-width: 640px) {
+    .toolbar { gap: 0.5rem; margin-bottom: 0.75rem; }
+    .filterBlock { min-width: 0; flex: 1; padding: 0.5rem 0.75rem; }
+    .filterField input { min-width: 0; font-size: 1rem; }
+    .separationSection { padding: 0.75rem; margin-bottom: 0.75rem; }
+    .sectionDesc, .sectionBadge { display: none; }
+    .separationGrid { grid-template-columns: minmax(0, 1fr); }
+    .separationTop { flex-wrap: wrap; }
+    .separationEmail { overflow-wrap: anywhere; }
+    .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; overflow: visible; }
+    .tab { padding: 0.65rem 0.3rem; justify-content: center; flex-wrap: wrap; white-space: normal; }
+    .cardHeaderLeft { flex-direction: column; align-items: flex-start; gap: 0.25rem; width: 100%; }
+    .cardHeaderLeft > div { min-width: 0; width: 100%; }
+    .userName { font-size: 1.1rem; white-space: normal; overflow-wrap: anywhere; }
+    .userEmail { color: #716057; }
+    .cardHeaderRight { flex-wrap: wrap; }
+    .itemName { white-space: normal; overflow-wrap: anywhere; }
+    .itemQty { color: #3e2723; font-size: 1rem; }
+    .footerMeta { gap: 0.65rem; }
+    .ticketCode { font-size: 1rem; color: #3e2723; }
+    .actions { width: 100%; flex-wrap: wrap; }
+    .actionBtn { flex: 1; justify-content: center; font-size: 0.95rem; white-space: normal; }
+    .cardFooter > .actionBtn { flex-basis: 100%; }
+    .statsBar { color: #716057; }
+}
+@media (max-width: 640px) {
+    .cardHeader { align-items: flex-start; }
+    .cardHeaderLeft { flex-basis: 100%; }
+    .cardHeaderRight { width: 100%; }
+    .filterBlock { padding-block: 0.25rem; }
+    .filterHeader { font-size: 0.75rem; }
+}
+
+@media (max-width: 640px) {
+    .itemThumb, .itemThumbPlaceholder { display: none; }
+    .itemQty { order: -1; }
+}

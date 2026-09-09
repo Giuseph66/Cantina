@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ProxyImage } from '../../components/ProxyImage';
 import { useApi } from '../../hooks/useApi';
 import { AdminLayout } from '../../components/admin/AdminLayout';
@@ -40,6 +41,7 @@ interface Order {
     totalCents: number;
     paymentMethod: PaymentMethod;
     createdAt: string;
+    paidAt: string | null;
     user: { id: string; name: string; email: string } | null;
     items: OrderItem[];
     ticket: { id: string; codeShort: string; consumedAt: string | null; expiresAt: string } | null;
@@ -77,11 +79,11 @@ function shiftDate(days: number) {
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-    CREATED: 'Criado',
+    CREATED: 'Aguardando pagamento',
     CONFIRMED: 'Confirmado',
-    PAID: 'Pago',
-    IN_PREP: 'Em preparo',
-    READY: 'Pronto',
+    PAID: 'Pago · a separar',
+    IN_PREP: 'Em separação',
+    READY: 'Pronto para retirar',
     PICKED_UP: 'Retirado',
     CANCELLED: 'Cancelado',
     EXPIRED: 'Expirado',
@@ -105,25 +107,37 @@ const PICKUP_SEPARATION_STATUSES: OrderStatus[] = ['PAID', 'IN_PREP', 'READY'];
 const NEXT_ACTIONS: Partial<Record<OrderStatus, { label: string; status: OrderStatus; cls: string }[]>> = {
     CREATED: [{ label: 'Confirmar', status: 'CONFIRMED', cls: styles.btnConfirm },
         { label: 'Cancelar', status: 'CANCELLED', cls: styles.btnCancel }],
-    CONFIRMED: [{ label: 'Em preparo', status: 'IN_PREP', cls: styles.btnPrep },
+    CONFIRMED: [{ label: 'Começar separação', status: 'IN_PREP', cls: styles.btnPrep },
         { label: 'Cancelar', status: 'CANCELLED', cls: styles.btnCancel }],
-    PAID: [{ label: 'Em preparo', status: 'IN_PREP', cls: styles.btnPrep }],
-    IN_PREP: [{ label: 'Pronto', status: 'READY', cls: styles.btnReady }],
+    PAID: [{ label: 'Começar separação', status: 'IN_PREP', cls: styles.btnPrep }],
+    IN_PREP: [{ label: 'Marcar como separado', status: 'READY', cls: styles.btnReady }],
 };
+
+function isPaid(order: Order) {
+    return !!order.paidAt || (order.status === 'PAID' && order.paymentMethod !== 'PIX');
+}
+
+function needsPickup(order: Order) {
+    return isPaid(order) && PICKUP_SEPARATION_STATUSES.includes(order.status) && !order.ticket?.consumedAt;
+}
 
 export default function OrdersPage() {
     const api = useApi();
+    const navigate = useNavigate();
+    const [search, setSearch] = useState('');
+    const [error, setError] = useState('');
     const today = toInputDate(new Date());
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
+    const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL' | 'SEPARATE' | 'DELIVER'>('SEPARATE');
     const [updating, setUpdating] = useState<string | null>(null);
     const [dateFrom, setDateFrom] = useState(today);
     const [dateTo, setDateTo] = useState(today);
+    const [appliedRange, setAppliedRange] = useState({ dateFrom: today, dateTo: today });
 
     const fetchOrders = async (silent = false, range?: { dateFrom: string; dateTo: string }) => {
-        const filters = range ?? { dateFrom, dateTo };
+        const filters = range ?? appliedRange;
         if (silent) setRefreshing(true); else setLoading(true);
         try {
             const qs = new URLSearchParams();
@@ -131,8 +145,9 @@ export default function OrdersPage() {
             if (filters.dateTo) qs.set('dateTo', filters.dateTo);
             const data = await api.get<Order[]>(`/admin/orders${qs.toString() ? `?${qs}` : ''}`);
             setOrders(data);
+            setError('');
         } catch (err) {
-            console.error(err);
+            setError('Não foi possível atualizar os pedidos. Confira a conexão e tente novamente.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -148,7 +163,7 @@ export default function OrdersPage() {
             void fetchOrders(true);
         }, 30_000);
         return () => clearInterval(interval);
-    }, [dateFrom, dateTo]);
+    }, [appliedRange]);
 
     const counts = useMemo(() => {
         const map: Partial<Record<OrderStatus, number>> = {};
@@ -156,15 +171,24 @@ export default function OrdersPage() {
         return map;
     }, [orders]);
 
-    const visible = useMemo(() =>
-        activeTab === 'ALL' ? orders : orders.filter((order) => order.status === activeTab),
-    [orders, activeTab]);
+    const searched = useMemo(() => {
+        const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const query = normalize(search.trim());
+        return orders.filter(order => normalize(`${order.user?.name ?? 'Balcão'} ${order.user?.email ?? ''} ${order.id} ${order.ticket?.codeShort ?? ''}`).includes(query));
+    }, [orders, search]);
+    const visible = useMemo(() => searched.filter(order => {
+        if (activeTab === 'ALL') return true;
+        if (activeTab === 'SEPARATE') return needsPickup(order) && order.status !== 'READY';
+        if (activeTab === 'DELIVER') return needsPickup(order) && order.status === 'READY';
+        return order.status === activeTab;
+    }).sort((a, b) => activeTab === 'SEPARATE' || activeTab === 'DELIVER'
+        ? Date.parse(a.createdAt) - Date.parse(b.createdAt) : Date.parse(b.createdAt) - Date.parse(a.createdAt)), [searched, activeTab]);
 
     const separationGroups = useMemo<SeparationGroup[]>(() => {
         const byUser = new Map<string, SeparationGroup>();
 
-        for (const order of orders) {
-            if (!order.user || !PICKUP_SEPARATION_STATUSES.includes(order.status)) continue;
+        for (const order of searched) {
+            if (!order.user || !needsPickup(order)) continue;
 
             const current = byUser.get(order.user.id) ?? {
                 userId: order.user.id,
@@ -194,9 +218,10 @@ export default function OrdersPage() {
 
         return Array.from(byUser.values())
             .sort((left, right) => left.name.localeCompare(right.name));
-    }, [orders]);
+    }, [searched]);
 
     const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
+        if (updating) return;
         setUpdating(orderId);
         try {
             await api.patch(`/admin/orders/${orderId}/status`, { status });
@@ -211,21 +236,32 @@ export default function OrdersPage() {
     const applyQuickRange = (nextFrom: string, nextTo: string) => {
         setDateFrom(nextFrom);
         setDateTo(nextTo);
+        setAppliedRange({ dateFrom: nextFrom, dateTo: nextTo });
         void fetchOrders(false, { dateFrom: nextFrom, dateTo: nextTo });
     };
 
     const applyCurrentFilter = () => {
-        void fetchOrders(false);
+        if (dateFrom && dateTo && dateFrom > dateTo) {
+            setError('A data inicial deve ser anterior ou igual à data final.');
+            return;
+        }
+        setAppliedRange({ dateFrom, dateTo });
+        void fetchOrders(false, { dateFrom, dateTo });
     };
 
     return (
-        <AdminLayout title="Pedidos" subtitle="Filtre por período e organize os pedidos pagos antes da retirada">
+        <AdminLayout title="Pedidos" subtitle="Separe os lanches pagos. Confira o cliente antes de entregar.">
+            <label className={styles.searchField}>
+                <span>Buscar cliente ou código</span>
+                <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Nome do aluno ou código de retirada" />
+            </label>
+            {error && <p role="alert" className={styles.error}>{error}</p>}
             <div className={styles.toolbar}>
-                <div className={styles.filterBlock}>
-                    <div className={styles.filterHeader}>
+                <details className={styles.filterBlock}>
+                    <summary className={styles.filterHeader}>
                         <CalendarRange size={16} />
-                        <span>Período padrão</span>
-                    </div>
+                        <span>Período: {appliedRange.dateFrom === today && appliedRange.dateTo === today ? 'hoje' : 'personalizado'} · alterar</span>
+                    </summary>
                     <div className={styles.filterRow}>
                         <label className={styles.filterField}>
                             <span>De</span>
@@ -244,7 +280,7 @@ export default function OrdersPage() {
                         <button className={styles.quickBtn} onClick={() => applyQuickRange(shiftDate(-6), today)}>7 dias</button>
                         <button className={styles.quickBtn} onClick={() => applyQuickRange(shiftDate(-29), today)}>30 dias</button>
                     </div>
-                </div>
+                </details>
 
                 <button
                     className={`${styles.refreshBtn} ${refreshing ? styles.spinning : ''}`}
@@ -255,10 +291,10 @@ export default function OrdersPage() {
                 </button>
             </div>
 
-            <section className={styles.separationSection}>
-                <div className={styles.sectionHeader}>
+            <details className={styles.separationSection}>
+                <summary className={styles.sectionHeader}>
                     <div>
-                        <h3 className={styles.sectionTitle}>Separação por cliente</h3>
+                        <h3 className={styles.sectionTitle}>Resumo por cliente</h3>
                         <p className={styles.sectionDesc}>
                             Apenas clientes cadastrados com pedidos pagos e ainda não retirados.
                         </p>
@@ -266,7 +302,7 @@ export default function OrdersPage() {
                     <span className={styles.sectionBadge}>
                         {separationGroups.length} cliente{separationGroups.length !== 1 ? 's' : ''}
                     </span>
-                </div>
+                </summary>
 
                 {separationGroups.length === 0 ? (
                     <div className={styles.separationEmpty}>
@@ -311,30 +347,36 @@ export default function OrdersPage() {
                         ))}
                     </div>
                 )}
-            </section>
+            </details>
 
-            <div className={styles.tabs}>
-                <button
-                    className={`${styles.tab} ${activeTab === 'ALL' ? styles.tabActive : ''}`}
-                    onClick={() => setActiveTab('ALL')}
-                >
-                    Todos <span className={styles.tabCount}>{orders.length}</span>
-                </button>
-                {ALL_STATUSES.filter((status) => counts[status]).map((status) => (
-                    <button
-                        key={status}
-                        className={`${styles.tab} ${activeTab === status ? styles.tabActive : ''}`}
-                        onClick={() => setActiveTab(status)}
-                    >
-                        {STATUS_LABEL[status]} <span className={styles.tabCount}>{counts[status]}</span>
+            <div className={styles.tabs} aria-label="Etapas dos pedidos">
+                {([{ key: 'SEPARATE', label: 'A separar' }, { key: 'DELIVER', label: 'A entregar' }] as const).map(tab => (
+                    <button key={tab.key} aria-pressed={activeTab === tab.key} className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ''}`} onClick={() => setActiveTab(tab.key)}>
+                        {tab.label} <span className={styles.tabCount}>{orders.filter(order => needsPickup(order) && (tab.key === 'DELIVER' ? order.status === 'READY' : order.status !== 'READY')).length}</span>
                     </button>
                 ))}
+                <button
+                    className={`${styles.tab} ${activeTab !== 'SEPARATE' && activeTab !== 'DELIVER' ? styles.tabActive : ''}`}
+                    onClick={() => setActiveTab('ALL')}
+                >
+                    Histórico <span className={styles.tabCount}>{orders.length}</span>
+                </button>
+
             </div>
 
-            <p className={styles.statsBar}>
+            {activeTab !== 'SEPARATE' && activeTab !== 'DELIVER' && (
+                <label className={styles.searchField}>
+                    <span>Filtrar histórico por situação</span>
+                    <select value={activeTab} onChange={event => setActiveTab(event.target.value as OrderStatus | 'ALL')}>
+                        <option value="ALL">Todas as situações</option>
+                        {ALL_STATUSES.map(status => <option key={status} value={status}>{STATUS_LABEL[status]} ({counts[status] ?? 0})</option>)}
+                    </select>
+                </label>
+            )}
+            <p className={styles.statsBar} aria-live="polite">
                 {loading
                     ? 'Carregando...'
-                    : `${visible.length} pedido${visible.length !== 1 ? 's' : ''} entre ${dateFrom || '—'} e ${dateTo || '—'}`}
+                    : `${visible.length} pedido${visible.length !== 1 ? 's' : ''} entre ${appliedRange.dateFrom.split('-').reverse().join('/') || '—'} e ${appliedRange.dateTo.split('-').reverse().join('/') || '—'}`}
             </p>
 
             {loading ? (
@@ -342,12 +384,12 @@ export default function OrdersPage() {
             ) : visible.length === 0 ? (
                 <div className={styles.empty}>
                     <ClipboardList size={48} strokeWidth={1.2} className={styles.emptyIcon} />
-                    <p className={styles.emptyText}>Nenhum pedido encontrado</p>
+                    <p className={styles.emptyText}>{search ? 'Nenhum pedido com esse nome ou código.' : activeTab === 'SEPARATE' ? 'Tudo separado! Novos pedidos pagos aparecerão aqui.' : activeTab === 'DELIVER' ? 'Nenhum pedido separado aguardando retirada.' : 'Nenhum pedido neste período.'}</p>
                 </div>
             ) : (
                 <div className={styles.list}>
                     {visible.map((order) => {
-                        const actions = NEXT_ACTIONS[order.status] ?? [];
+                        const actions = (NEXT_ACTIONS[order.status] ?? []).filter(action => action.status !== 'IN_PREP' || isPaid(order));
                         const isUpdating = updating === order.id;
 
                         return (
@@ -359,7 +401,6 @@ export default function OrdersPage() {
                                             <p className={styles.userName}>{order.user?.name ?? 'Balcão'}</p>
                                             <p className={styles.userEmail}>{order.user?.email ?? '—'}</p>
                                         </div>
-                                        {order.user && <span className={styles.clientFlag}>Cliente cadastrado</span>}
                                     </div>
                                     <div className={styles.cardHeaderRight}>
                                         <span className={styles.channelBadge}>
@@ -399,17 +440,22 @@ export default function OrdersPage() {
                                             {formatTime(order.createdAt)}
                                         </span>
                                         {order.ticket && (
-                                            <span className={styles.ticketCode}>{order.ticket.codeShort}</span>
+                                            <span className={styles.ticketCode}>Código: {order.ticket.codeShort}</span>
                                         )}
                                     </div>
 
+                                    {order.status === 'READY' && order.ticket && (
+                                        <button className={`${styles.actionBtn} ${styles.btnConfirm}`} disabled={!!updating} onClick={() => navigate('/cashier/validate', { state: { code: order.ticket!.codeShort } })}>
+                                            Conferir e entregar
+                                        </button>
+                                    )}
                                     {actions.length > 0 && (
                                         <div className={styles.actions}>
                                             {actions.map((action) => (
                                                 <button
                                                     key={action.status}
                                                     className={`${styles.actionBtn} ${action.cls}`}
-                                                    disabled={isUpdating}
+                                                    disabled={!!updating}
                                                     onClick={() => handleUpdateStatus(order.id, action.status)}
                                                 >
                                                     {action.status === 'READY' && <CheckCheck size={13} />}

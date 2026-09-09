@@ -20,6 +20,7 @@ export function payloadCrypto(): RequestHandler {
                 res.status(400).json({ message: 'Canal criptografado obrigatório.' });
                 return;
             }
+            res.setHeader('Cache-Control', 'no-store');
             return next();
         }
         try {

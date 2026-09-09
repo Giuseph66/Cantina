@@ -44,6 +44,41 @@ describe('TicketsService', () => {
         expect(result.alreadyConsumed).toBe(false);
     });
 
+    it.each(['PIX', 'CARD'])('só libera retirada online %s após o pedido ficar pronto', async (paymentMethod) => {
+        const baseTicket = {
+            id: 'tk-online',
+            expiresAt: new Date(Date.now() + 100000),
+            consumedAt: null,
+            orderId: 'ord-online',
+            order: { channel: 'ONLINE', status: 'PAID', paymentMethod, paidAt: new Date() },
+        };
+        jest.spyOn(prisma.ticket, 'findUnique').mockResolvedValue(baseTicket as any);
+
+        await expect(service.consumeTicket('tk-online', 'cashier-1')).rejects.toThrow(
+            'Este pedido ainda está sendo separado',
+        );
+
+        jest.spyOn(prisma.ticket, 'findUnique').mockResolvedValue({
+            ...baseTicket,
+            order: { ...baseTicket.order, status: 'IN_PREP' },
+        } as any);
+        await expect(service.consumeTicket('tk-online', 'cashier-1')).rejects.toThrow(
+            'Este pedido ainda está sendo separado',
+        );
+
+        jest.spyOn(prisma.ticket, 'findUnique').mockResolvedValue({
+            ...baseTicket,
+            order: { ...baseTicket.order, status: 'READY' },
+        } as any);
+        jest.spyOn(prisma.ticket, 'update').mockResolvedValue({ ...baseTicket, consumedAt: new Date() } as any);
+
+        await expect(service.consumeTicket('tk-online', 'cashier-1')).resolves.toMatchObject({ alreadyConsumed: false });
+        expect(prisma.order.update).toHaveBeenCalledWith({
+            where: { id: 'ord-online' },
+            data: { status: 'PICKED_UP' },
+        });
+    });
+
     it('deve ser idempotente caso tente consumir novamente', async () => {
         const mockTicket = { id: 'tk1', expiresAt: new Date(Date.now() + 100000), consumedAt: new Date(), orderId: 'ord1', order: { status: 'PAID' } };
         jest.spyOn(prisma.ticket, 'findUnique').mockResolvedValue(mockTicket as any);

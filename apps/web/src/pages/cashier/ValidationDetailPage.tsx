@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
     CREATED: 'Aguardando pagamento',
     CONFIRMED: 'Aguardando retirada',
     PAID: 'Pago',
-    IN_PREP: 'Em preparo',
+    IN_PREP: 'Em separação',
     READY: 'Pronto',
     PICKED_UP: 'Retirado',
     CANCELLED: 'Cancelado',
@@ -213,6 +213,7 @@ export default function ValidationDetailPage() {
         isReportedPix;
     const canReturnToPending = order.status !== 'CREATED';
     const isInternalCredit = order.paymentMethod === 'INTERNAL_CREDIT';
+    const needsSeparation = order.channel === 'ONLINE' && order.status !== 'READY' && !alreadyConsumed;
     const customerName = order.user?.name?.trim() || 'Cliente sem cadastro';
     const customerEmail = order.user?.email?.trim() || 'Pedido avulso / convidado';
     const customerInitial = customerName.charAt(0).toUpperCase();
@@ -221,7 +222,7 @@ export default function ValidationDetailPage() {
     const totalItems = order.items.reduce((sum: number, item: any) => sum + item.qty, 0);
 
     return (
-        <CashierLayout title={`Ticket #${ticket.codeShort}`} subtitle="Detalhe de validação do pedido">
+        <CashierLayout title="Conferir entrega" subtitle="Confira nome, código e lanches antes de confirmar.">
             <div className={styles.shell}>
                 {isOfflineMode && (
                     <div className={`${styles.notice} ${styles.noticeWarning}`}>
@@ -244,7 +245,7 @@ export default function ValidationDetailPage() {
                 <section className={styles.heroCard}>
                     <div className={styles.heroIntro}>
                         <div>
-                            <span className={styles.eyebrow}>Ticket liberado para conferência</span>
+                            <span className={styles.eyebrow}>Código de retirada</span>
                             <h2 className={styles.ticketCode}>#{ticket.codeShort}</h2>
                             <p className={styles.heroText}>Confirme os dados do pedido antes de concluir a retirada.</p>
                         </div>
@@ -297,7 +298,7 @@ export default function ValidationDetailPage() {
                                     <div className={styles.itemMain}>
                                         <span className={styles.qty}>{item.qty}x</span>
                                         <div>
-                                            <div className={styles.productName}>{item.product.name}</div>
+                                            <div className={styles.productName}>{item.product?.name ?? item.productName ?? 'Produto removido'}</div>
                                             <div className={styles.itemMeta}>
                                                 {formatCurrency(item.unitPriceCents)} cada
                                             </div>
@@ -338,7 +339,23 @@ export default function ValidationDetailPage() {
                         </section>
 
                         <section className={styles.actionCard}>
-                            {isPendingPayment ? (
+                            {needsSeparation ? (
+                                <>
+                                    <div className={styles.actionLead} style={{ color: '#7c3aed' }}>
+                                        Pedido ainda em separação
+                                    </div>
+                                    <p className={styles.actionText}>
+                                        O pagamento está confirmado, mas os lanches ainda não foram marcados como prontos para retirada.
+                                    </p>
+                                    <div className={styles.blockedNotice} style={{ background: '#f5f3ff', borderColor: '#ddd6fe', color: '#5b21b6' }}>
+                                        <AlertTriangle size={24} strokeWidth={2.5} />
+                                        <p>Não entregue agora. Aguarde a separação e valide novamente quando o pedido estiver pronto.</p>
+                                    </div>
+                                    <button className={styles.btnBack} onClick={() => navigate('/cashier/scan')}>
+                                        Ler outro pedido
+                                    </button>
+                                </>
+                            ) : isPendingPayment ? (
                                 <>
                                     <div className={styles.actionLead} style={{ color: '#d97706' }}>
                                         Pagamento pendente
@@ -452,7 +469,7 @@ export default function ValidationDetailPage() {
                             ) : (
                                 <>
                                     <div className={styles.actionLead}>
-                                        {alreadyConsumed ? 'Retirada já registrada' : isInternalCredit ? 'Pedido lançado na notinha' : 'Pedido pronto para retirada'}
+                                        {alreadyConsumed ? 'Retirada já registrada' : isInternalCredit ? 'Pedido lançado na notinha' : 'Confira os lanches para entregar'}
                                     </div>
                                     <p className={styles.actionText}>
                                         {alreadyConsumed

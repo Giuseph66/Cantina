@@ -159,7 +159,8 @@ export default function CheckoutPage() {
         || (checkoutMethod === 'ON_PICKUP' && !config.allowOnPickupPayment);
     const canCreateOrder = !isResumingOrder && items.length > 0 && !creatingOrder && !loadingConfig && !checkoutUnavailable && pode_vender;
     const canGeneratePix = !!onlineOrder && config.pixEnabled && !processingPayment && config.newChargesEnabled !== false;
-    const canPayCard = !!onlineOrder && config.cardEnabled && !processingPayment && config.newChargesEnabled !== false;
+    const cardBelowMinimum = !!onlineOrder && onlineOrder.totalCents < 500;
+    const canPayCard = !!onlineOrder && config.cardEnabled && !cardBelowMinimum && !processingPayment && config.newChargesEnabled !== false;
 
     function syncOnlineMethod(payment: PaymentResponse | null, preserveSelection = false) {
         if (preserveSelection && payment?.status !== 'APPROVED') {
@@ -420,6 +421,10 @@ export default function CheckoutPage() {
     async function submitCardPayment() {
         try {
             if (!onlineOrder) return;
+            if (cardBelowMinimum) {
+                setError('O pagamento com cartão exige pedido mínimo de R$ 5,00. Use Pix ou adicione mais itens.');
+                return;
+            }
             setProcessingPayment(true);
             setError('');
             const payment = await api.post<PaymentResponse>(`/payments/orders/${onlineOrder.id}/card`, {});
@@ -657,7 +662,7 @@ export default function CheckoutPage() {
                     onClick={() => navigator.clipboard.writeText(activePaymentSummary.qrCode || '')}
                 >
                     <Copy size={18} />
-                    Copiar codigo PIX
+                    Copiar código Pix
                 </button>
 
                 <p className={styles.inlineHint}>
@@ -748,33 +753,35 @@ export default function CheckoutPage() {
 
                         <div className={styles.paymentOptions}>
                             {config.pixEnabled && (
-                                <div
+                                <label
                                     className={`${styles.option} ${onlineMethod === 'PIX' ? styles.activeOption : ''}`}
-                                    onClick={() => setOnlineMethod('PIX')}
                                 >
                                     <QrCode size={22} color={onlineMethod === 'PIX' ? 'var(--secondary)' : 'var(--text-dim)'} />
                                     <div className={styles.paymentTextBlock}>
                                         <span className={styles.paymentLabel}>Pix</span>
-                                        <span className={styles.paymentHint}>Gera QR Code e copia e cola na hora.</span>
+                                        <span className={styles.paymentHint}>Copie o código e pague no app do seu banco.</span>
                                     </div>
-                                    <input type="radio" checked={onlineMethod === 'PIX'} readOnly />
-                                </div>
+                                    <input type="radio" name="online-payment-method" aria-label="Pix" checked={onlineMethod === 'PIX'} onChange={() => setOnlineMethod('PIX')} />
+                                </label>
                             )}
 
                             {config.cardEnabled && (
-                                <div
-                                    className={`${styles.option} ${onlineMethod === 'CARD' ? styles.activeOption : ''}`}
-                                    onClick={() => setOnlineMethod('CARD')}
+                                <label
+                                    className={`${styles.option} ${onlineMethod === 'CARD' ? styles.activeOption : ''} ${cardBelowMinimum ? styles.optionDisabled : ''}`}
                                 >
                                     <CreditCard size={22} color={onlineMethod === 'CARD' ? 'var(--secondary)' : 'var(--text-dim)'} />
                                     <div className={styles.paymentTextBlock}>
-                                        <span className={styles.paymentLabel}>Cartao</span>
-                                        <span className={styles.paymentHint}>Credito ou debito com tokenizacao segura.</span>
+                                        <span className={styles.paymentLabel}>Cartão</span>
+                                        <span className={styles.paymentHint}>Pague na página segura do Asaas.</span>
                                     </div>
-                                    <input type="radio" checked={onlineMethod === 'CARD'} readOnly />
-                                </div>
+                                    <input type="radio" name="online-payment-method" aria-label="Cartão" checked={onlineMethod === 'CARD'} onChange={() => setOnlineMethod('CARD')} disabled={cardBelowMinimum} />
+                                </label>
                             )}
                         </div>
+
+                        {cardBelowMinimum && (
+                            <p className={styles.inlineHint}>Cartão disponível a partir de R$ 5,00. Para este pedido, use Pix ou adicione mais itens.</p>
+                        )}
 
                         {onlineMethod === 'PIX' && renderPixResult()}
 

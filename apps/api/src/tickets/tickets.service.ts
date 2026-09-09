@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { ConfigService } from '@nestjs/config';
-import { OrderStatus, PaymentMethod, StockMode } from '../common/enums';
+import { OrderChannel, OrderStatus, PaymentMethod, StockMode } from '../common/enums';
 import { MarkInternalCreditDto } from './dto/ticket.dto';
 import * as crypto from 'crypto';
 import { AppSettingsService } from '../common/services/app-settings.service';
@@ -139,6 +139,12 @@ export class TicketsService {
         if (ticket.order.paymentMethod === PaymentMethod.PIX && !ticket.order.paidAt) {
             throw new BadRequestException(
                 'Pagamento PIX não confirmado pelo sistema. Verifique o comprovante e use "Marcar como pago" antes de liberar a retirada.',
+            );
+        }
+
+        if (ticket.order.channel === OrderChannel.ONLINE && ticket.order.status !== OrderStatus.READY) {
+            throw new BadRequestException(
+                'Este pedido ainda está sendo separado. Marque como pronto antes de confirmar a retirada.',
             );
         }
 

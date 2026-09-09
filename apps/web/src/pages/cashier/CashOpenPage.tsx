@@ -49,18 +49,20 @@ export default function CashOpenPage() {
     if (hasOpenSession) return null;
 
     return (
-        <CashierLayout title="Abrir Caixa" subtitle="Informe o fundo de caixa para iniciar as operações">
+        <CashierLayout title="Abrir Caixa" subtitle="Informe quanto dinheiro há na gaveta para dar troco.">
             <div className={styles.card}>
                 <div className={styles.iconWrapper}>
                     <LogIn size={48} strokeWidth={2.5} />
                 </div>
                 <p className={styles.description}>
-                    Para iniciar as operações, informe o valor do troco (fundo de caixa) inicial.
+                    Conte apenas notas e moedas. Pix e cartão não entram aqui. Se não houver troco, informe 0.
                 </p>
 
                 <form onSubmit={handleSubmit} className={styles.form}>
-                    <label className={styles.label}>Valor em Caixa Inicial (R$)</label>
+                    <label htmlFor="opening-cash" className={styles.label}>Dinheiro para troco (R$)</label>
                     <input
+                        id="opening-cash"
+                        inputMode="decimal"
                         type="number"
                         step="0.01"
                         min="0"
@@ -69,7 +71,6 @@ export default function CashOpenPage() {
                         placeholder="0.00"
                         className={styles.input}
                         required
-                        autoFocus
                     />
 
                     <button type="submit" className={styles.btnSubmit} disabled={loading}>

@@ -34,7 +34,7 @@ export function ReportCards({ data }: { data: KPIData | null }) {
                     <FileText size={28} strokeWidth={2.5} />
                 </div>
                 <div>
-                    <h4 className={styles.kpiLabel}>Entregues</h4>
+                    <h4 className={styles.kpiLabel}>Pedidos pagos</h4>
                     <p className={styles.kpiValue}>{data.orderCount}</p>
                 </div>
             </div>

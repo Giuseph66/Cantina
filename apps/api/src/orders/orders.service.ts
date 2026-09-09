@@ -158,7 +158,7 @@ export class OrdersService {
             .reduce((sum, order) => sum + order.totalCents, 0);
 
         const pendingPickupCount = orders
-            .filter((order) => ['PAID', 'CONFIRMED'].includes(order.status)).length;
+            .filter((order) => ['PAID', 'IN_PREP', 'READY', 'CONFIRMED'].includes(order.status)).length;
 
         const legacyPickupDebtCents = orders
             .filter((order) => order.paymentMethod === PaymentMethod.ON_PICKUP && order.status === 'CONFIRMED')

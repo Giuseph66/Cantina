@@ -39,7 +39,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
                     <Store size={24} strokeWidth={3} />
                     <span>Cantina</span>
                 </div>
-                <button className={styles.menuBtn} onClick={() => setIsMobileOpen(o => !o)}>
+                <button aria-label={isMobileOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={isMobileOpen} className={styles.menuBtn} onClick={() => setIsMobileOpen(o => !o)}>
                     {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
             </header>
@@ -99,9 +99,9 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
                     <NavSection label="Operação de Caixa" collapsed={isDrawerCollapsed} />
 
                     <button className={`${styles.navBtn} ${isActive('/cashier/scan') ? styles.activeNav : ''}`}
-                        onClick={() => go('/cashier/scan')} title="Operador de Caixa">
+                        onClick={() => go('/cashier/scan')} title="Entregar pedido">
                         <QrCode size={20} />
-                        {!isDrawerCollapsed && <span>Operador de Caixa</span>}
+                        {!isDrawerCollapsed && <span>Entregar pedido</span>}
                     </button>
 
                     <button className={`${styles.navBtn} ${isActive('/cashier/counter') ? styles.activeNav : ''}`}
@@ -146,6 +146,11 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
                 </div>
             </aside>
 
+            <nav className={styles.mobileOperations} aria-label="Atendimento">
+                <button aria-current={isActive('/admin/orders') ? 'page' : undefined} onClick={() => go('/admin/orders')}><ClipboardList size={20} />Pedidos</button>
+                <button aria-current={location.pathname.startsWith('/cashier/scan') || isActive('/cashier/validate') ? 'page' : undefined} onClick={() => go('/cashier/scan')}><QrCode size={20} />Entregar</button>
+                <button aria-current={location.pathname.startsWith('/cashier/cash-') ? 'page' : undefined} onClick={() => go('/cashier/cash-open')}><Wallet size={20} />Caixa</button>
+            </nav>
             <main className={styles.main}>
                 <header className={styles.header}>
                     <div className={styles.titleBlock}>
