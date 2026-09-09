@@ -47,7 +47,7 @@ remote "CANTINA_REMOTE_DIR=$(printf '%q' "$remote_dir") bash -s" <<'REMOTE'
 set -Eeuo pipefail
 cd "$CANTINA_REMOTE_DIR"
 docker compose --env-file .env.production -f docker-compose.prod.yml build migrate
-docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml run -T --rm migrate
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --no-deps --force-recreate api
 REMOTE
 
