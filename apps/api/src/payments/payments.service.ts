@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { AppSettingsService } from '../common/services/app-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsaasPaymentsService } from './asaas-payments.service';
+import { AbacatePayPaymentsService } from './abacatepay-payments.service';
 import { CreateCardPaymentDto, CreatePixPaymentDto } from './dto/payment.dto';
 
 @Injectable()
@@ -10,19 +11,25 @@ export class PaymentsService {
         private readonly prisma: PrismaService,
         private readonly appSettings: AppSettingsService,
         private readonly asaas: AsaasPaymentsService,
+        private readonly abacatepay: AbacatePayPaymentsService,
     ) { }
 
     getPublicConfig() {
         const settings = this.appSettings.getSettings();
-        const onlineEnabled = this.asaas.client.configured;
+        const pixProvider = this.getPixProvider();
+        const pixEnabled = pixProvider === 'ABACATEPAY' ? this.abacatepay.client.configured : this.asaas.client.configured;
+        const cardEnabled = this.asaas.client.configured;
         return {
             allowOnPickupPayment: settings.allowOnPickupPayment,
-            onlineEnabled,
-            pixEnabled: onlineEnabled,
-            cardEnabled: onlineEnabled,
+            onlineEnabled: pixEnabled || cardEnabled,
+            pixEnabled,
+            pixProvider,
+            cardEnabled,
             cardProvider: 'ASAAS',
             cardFlow: 'HOSTED_INVOICE',
-            sandbox: onlineEnabled && this.asaas.client.environment === 'sandbox',
+            sandbox: pixProvider === 'ABACATEPAY'
+                ? pixEnabled && this.abacatepay.client.environment === 'development'
+                : pixEnabled && this.asaas.client.environment === 'sandbox',
             salesEnabled: process.env.SALES_ENABLED === 'true',
             newChargesEnabled: process.env.PAYMENTS_NEW_CHARGES_ENABLED !== 'false',
         };
@@ -30,7 +37,10 @@ export class PaymentsService {
 
     async createPixPayment(orderId: string, userId: string, role: string, _dto: CreatePixPaymentDto) {
         await this.assertCanAccessOrder(orderId, userId, role);
-        return this.serializePaymentTransaction(await this.asaas.create(orderId, 'PIX'));
+        const transaction = this.getPixProvider() === 'ABACATEPAY'
+            ? await this.abacatepay.create(orderId)
+            : await this.asaas.create(orderId, 'PIX');
+        return this.serializePaymentTransaction(transaction);
     }
 
     async createCardPayment(orderId: string, userId: string, role: string, _dto: CreateCardPaymentDto) {
@@ -44,6 +54,7 @@ export class PaymentsService {
         });
         const latestPayment = order.paymentTransactions[0];
         if (latestPayment?.provider === 'ASAAS') await this.asaas.reconcile(latestPayment);
+        if (latestPayment?.provider === 'ABACATEPAY') await this.abacatepay.reconcile(latestPayment);
         const refreshed = await this.prisma.order.findUnique({
             where: { id: orderId },
             include: { paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1 } },
@@ -62,7 +73,10 @@ export class PaymentsService {
 
     async cancelPendingPayment(orderId: string, userId: string, role: string) {
         await this.assertCanAccessOrder(orderId, userId, role);
-        return this.serializePaymentTransaction(await this.asaas.cancel(orderId));
+        const pending = await this.prisma.paymentTransaction.findFirst({ where: { orderId, status: 'PENDING' }, orderBy: { createdAt: 'desc' } });
+        if (!pending || pending.provider === 'ASAAS') return this.serializePaymentTransaction(await this.asaas.cancel(orderId));
+        if (pending.provider === 'ABACATEPAY') return this.serializePaymentTransaction(await this.abacatepay.cancel(orderId));
+        throw new NotFoundException('Pagamento pendente não encontrado.');
     }
 
     serializePaymentTransaction(transaction: {
@@ -99,5 +113,11 @@ export class PaymentsService {
             const parsed = JSON.parse(value);
             return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch { return {}; }
+    }
+
+    private getPixProvider(): 'ASAAS' | 'ABACATEPAY' {
+        const provider = (process.env.PIX_PROVIDER ?? 'ASAAS').trim().toUpperCase();
+        if (provider === 'ASAAS' || provider === 'ABACATEPAY') return provider;
+        throw new ForbiddenException('PIX_PROVIDER deve ser ASAAS ou ABACATEPAY.');
     }
 }

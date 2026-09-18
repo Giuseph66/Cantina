@@ -10,7 +10,7 @@ import {
     UpdateOrderStatusDto,
     BulkStockUpdateDto,
 } from './dto/admin.dto';
-import { OrderStatus } from '../common/enums';
+import { OrderStatus, StockMode } from '../common/enums';
 import { UploadsService } from '../uploads/uploads.service';
 import { AppSettings, AppSettingsService } from '../common/services/app-settings.service';
 import { BackupsService } from '../backups/backups.service';
@@ -186,11 +186,38 @@ export class AdminService {
     }
 
     async updateOrderStatus(id: string, dto: UpdateOrderStatusDto, actorId: string) {
-        const order = await this.prisma.order.update({
+        const current = await this.prisma.order.findUnique({
             where: { id },
-            data: { status: dto.status },
+            include: { items: true },
         });
-        await this.audit.log(actorId, 'ORDER_STATUS_UPDATED', 'Order', id, { status: dto.status });
+
+        if (!current) {
+            throw new NotFoundException('Pedido não encontrado.');
+        }
+
+        const isClosed = (status: OrderStatus) => status === OrderStatus.CANCELLED || status === OrderStatus.EXPIRED;
+        const shouldRestock = isClosed(dto.status) && !isClosed(current.status as OrderStatus);
+
+        const order = await this.prisma.$transaction(async (tx) => {
+            if (shouldRestock) {
+                for (const item of current.items) {
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    if (product?.stockMode === StockMode.CONTROLLED) {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { stockQty: { increment: item.qty } },
+                        });
+                    }
+                }
+            }
+
+            return tx.order.update({
+                where: { id },
+                data: { status: dto.status },
+            });
+        });
+
+        await this.audit.log(actorId, 'ORDER_STATUS_UPDATED', 'Order', id, { status: dto.status, restocked: shouldRestock });
         return order;
     }
 

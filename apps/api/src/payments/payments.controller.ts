@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Headers, UseGuards, HttpCode } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Headers, UseGuards, HttpCode, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { CreateCardPaymentDto, CreatePixPaymentDto } from './dto/payment.dto';
@@ -7,15 +8,31 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { CsrfGuard } from '../common/guards/csrf.guard';
 import { AsaasPaymentsService } from './asaas-payments.service';
+import { AbacatePayPaymentsService } from './abacatepay-payments.service';
 
 @Controller()
 export class PaymentsController {
-    constructor(private readonly paymentsService: PaymentsService, private readonly asaas: AsaasPaymentsService) { }
+    constructor(
+        private readonly paymentsService: PaymentsService,
+        private readonly asaas: AsaasPaymentsService,
+        private readonly abacatepay: AbacatePayPaymentsService,
+    ) { }
 
     @Post('webhooks/asaas')
     @HttpCode(200)
     asaasWebhook(@Headers('asaas-access-token') token: string | undefined, @Body() body: Record<string, unknown>) {
         return this.asaas.receiveWebhook(token, body);
+    }
+
+    @Post('webhooks/abacatepay')
+    @HttpCode(200)
+    abacatepayWebhook(
+        @Query('webhookSecret') webhookSecret: string | undefined,
+        @Headers('x-webhook-signature') signature: string | undefined,
+        @Req() request: Request & { rawBody?: Buffer },
+        @Body() body: Record<string, unknown>,
+    ) {
+        return this.abacatepay.receiveWebhook(webhookSecret, signature, request.rawBody, body);
     }
 
     @Get('payments/public-config')
