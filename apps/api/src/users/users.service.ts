@@ -4,6 +4,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Role } from '../common/enums';
+import { isValidCpf } from '../common/utils/cpf';
 
 type SafeUser = Omit<User, 'passwordHash' | 'googleSub'>;
 
@@ -132,7 +133,9 @@ export class UsersService {
         if (value === undefined) return undefined;
         if (value === null) return null;
         const normalized = value.replace(/\D/g, '');
-        return normalized || null;
+        if (!normalized) return null;
+        if (!isValidCpf(normalized)) throw new BadRequestException('CPF inválido');
+        return normalized;
     }
 
     private normalizePhone(value?: string | null) {

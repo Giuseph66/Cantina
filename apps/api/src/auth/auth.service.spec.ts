@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException, ForbiddenException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -267,23 +267,31 @@ describe('AuthService', () => {
             ...mockUser,
             id: 'client-1',
             role: Role.CLIENT,
-            cpf: '12345678901',
+            cpf: '52998224725',
             phone: '65999999999',
         });
 
         const result = await service.updateProfile('client-1', {
-            cpf: '12345678901',
+            cpf: '52998224725',
             phone: '65999999999',
         });
 
-        expect(result.cpf).toBe('12345678901');
+        expect(result.cpf).toBe('52998224725');
         expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('deve rejeitar CPF com dígitos verificadores inválidos', async () => {
+        await expect(service.updateProfile('client-1', {
+            cpf: '12345678901',
+            phone: '65999999999',
+        })).rejects.toThrow(BadRequestException);
+        expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
     it('deve bloquear troca de CPF após pagamento aprovado', async () => {
         prisma.user.findUnique.mockResolvedValue({
             id: 'client-1',
-            cpf: '12345678901',
+            cpf: '52998224725',
             phone: '65999999999',
         });
         prisma.user.findFirst.mockResolvedValue(null);
@@ -293,7 +301,7 @@ describe('AuthService', () => {
         });
 
         await expect(service.updateProfile('client-1', {
-            cpf: '10987654321',
+            cpf: '11144477735',
             phone: '65999999999',
         })).rejects.toThrow(ForbiddenException);
     });
@@ -301,7 +309,7 @@ describe('AuthService', () => {
     it('deve bloquear troca de celular após pagamento aprovado', async () => {
         prisma.user.findUnique.mockResolvedValue({
             id: 'client-1',
-            cpf: '12345678901',
+            cpf: '52998224725',
             phone: '65999999999',
         });
         prisma.user.findFirst.mockResolvedValue(null);
@@ -311,7 +319,7 @@ describe('AuthService', () => {
         });
 
         await expect(service.updateProfile('client-1', {
-            cpf: '12345678901',
+            cpf: '52998224725',
             phone: '65111111111',
         })).rejects.toThrow(ForbiddenException);
     });

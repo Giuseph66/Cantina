@@ -80,6 +80,20 @@ function normalizeTaxId(value: string) {
     return value.replace(/\D/g, '');
 }
 
+function isValidCpf(value: string) {
+    const cpf = normalizeTaxId(value);
+    if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+
+    const calculateDigit = (digits: string, factor: number) => {
+        const total = [...digits].reduce((sum, digit, index) => sum + Number(digit) * (factor - index), 0);
+        const remainder = total % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    return calculateDigit(cpf.slice(0, 9), 10) === Number(cpf[9])
+        && calculateDigit(cpf.slice(0, 10), 11) === Number(cpf[10]);
+}
+
 function normalizePhone(value: string) {
     return value.replace(/\D/g, '');
 }
@@ -374,8 +388,8 @@ export default function CheckoutPage() {
         const normalizedCpf = normalizeTaxId(payerDocument);
         const normalizedPhone = normalizePhone(payerPhone);
 
-        if (normalizedCpf.length !== 11) {
-            throw new Error('Informe um CPF válido com 11 dígitos para continuar.');
+        if (!isValidCpf(normalizedCpf)) {
+            throw new Error('Informe um CPF válido para continuar.');
         }
 
         if (normalizedPhone.length < 10) {

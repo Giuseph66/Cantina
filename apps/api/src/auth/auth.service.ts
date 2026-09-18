@@ -13,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { PaymentMethod, Role } from '../common/enums';
 import { AuditService } from '../common/services/audit.service';
+import { isValidCpf } from '../common/utils/cpf';
 import { OAuth2Client, type TokenPayload } from 'google-auth-library';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -211,8 +212,8 @@ export class AuthService {
         const cpf = this.normalizeCpf(dto.cpf);
         const phone = this.normalizePhone(dto.phone);
 
-        if (cpf.length !== 11) {
-            throw new BadRequestException('Informe um CPF válido com 11 dígitos');
+        if (!isValidCpf(cpf)) {
+            throw new BadRequestException('Informe um CPF válido.');
         }
 
         if (phone.length < 10 || phone.length > 15) {
@@ -289,7 +290,7 @@ export class AuthService {
     }
 
     private isProfileComplete(user: Pick<User, 'cpf' | 'phone'>) {
-        return !!user.cpf && !!user.phone;
+        return isValidCpf(user.cpf) && !!user.phone;
     }
 
     private getGoogleClientId() {
