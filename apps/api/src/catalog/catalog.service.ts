@@ -32,10 +32,26 @@ export class CatalogService {
             ],
         });
 
-        return products.map(product => ({
-            ...product,
-            imageUrl: this.uploadsService.normalizePublicUrl(product.imageUrl),
-        }));
+        const today = new Date().getDay();
+
+        return products
+            .map(product => {
+                const isWeeklySpecialToday = product.weeklySpecialDay === today;
+                const isWeeklySpecialPending = product.weeklySpecialDay !== null && !isWeeklySpecialToday;
+
+                return {
+                    ...product,
+                    imageUrl: this.uploadsService.normalizePublicUrl(product.imageUrl),
+                    isWeeklySpecialToday,
+                    isWeeklySpecialPending,
+                };
+            })
+            .sort((a, b) => {
+                if (a.isWeeklySpecialPending !== b.isWeeklySpecialPending) {
+                    return a.isWeeklySpecialPending ? 1 : -1;
+                }
+                return 0;
+            });
     }
 
     async getProductById(id: string) {

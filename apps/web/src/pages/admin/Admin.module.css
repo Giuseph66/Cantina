@@ -1,6 +1,6 @@
 .page {
     display: flex;
-    height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     background-color: var(--bg-main);
     color: var(--text-main);
@@ -604,10 +604,10 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 70px;
+        height: calc(70px + env(safe-area-inset-top, 0px));
         background: white;
         border-bottom: 1px solid var(--glass-border);
-        padding: 0 1.5rem;
+        padding: env(safe-area-inset-top, 0px) 1.5rem 0;
         align-items: center;
         justify-content: space-between;
         z-index: 1000;
@@ -684,8 +684,8 @@
     }
 
     .main {
-        padding: 6rem 1.25rem 2rem;
-        padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+        padding: calc(6rem + env(safe-area-inset-top, 0px)) 1.25rem 2rem;
+        padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
         overflow: visible;
         height: auto;
         min-height: calc(100dvh - 70px);
@@ -800,7 +800,7 @@
 
 .adminModal {
     width: min(1120px, 100%);
-    max-height: calc(100vh - 4rem);
+    max-height: calc(100dvh - 4rem);
     overflow: hidden;
     background: white;
     border: 1px solid var(--glass-border);
@@ -893,7 +893,7 @@
     }
 
     .adminModal {
-        max-height: 95vh;
+        max-height: 95dvh;
         margin: 1rem;
     }
 }
@@ -906,7 +906,7 @@
 
     .adminModal {
         width: 100%;
-        max-height: 92vh;
+        max-height: 92dvh;
         border-radius: 1.5rem 1.5rem 0 0;
         margin: 0;
     }
@@ -1230,8 +1230,8 @@
 
 .mobileOperations { display: none; }
 @media (max-width: 768px) {
-    .mobileOperations { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: #fffdfb; border-top: 1px solid #e8ddd5; padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom)); }
+    .mobileOperations { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background: #fffdfb; border-top: 1px solid #e8ddd5; padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px)); }
     .mobileOperations button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; min-height: 52px; border: 0; border-radius: 10px; background: transparent; color: #5d4037; font: inherit; font-size: 0.8rem; font-weight: 700; }
     .mobileOperations button[aria-current="page"] { background: #f3e5d6; color: #3e2723; }
-    .main { padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
+    .main { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
 }

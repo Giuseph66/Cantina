@@ -57,11 +57,17 @@ export class OrdersService {
             throw new BadRequestException('Um ou mais produtos não encontrados ou inativos');
         }
 
+        const today = new Date().getDay();
         for (const item of dto.items) {
             const product = products.find((current) => current.id === item.productId)!;
             if (product.stockMode === StockMode.CONTROLLED && product.stockQty < item.qty) {
                 throw new BadRequestException(
                     `Estoque insuficiente para "${product.name}" (disponível: ${product.stockQty})`,
+                );
+            }
+            if (product.weeklySpecialDay != null && product.weeklySpecialDay !== today) {
+                throw new BadRequestException(
+                    `"${product.name}" é um especial da semana e não está disponível hoje`,
                 );
             }
         }

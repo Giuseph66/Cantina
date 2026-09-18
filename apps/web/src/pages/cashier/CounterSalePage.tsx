@@ -8,6 +8,7 @@ import { CashierLayout } from '../../components/cashier/CashierLayout';
 import { useApi } from '../../hooks/useApi';
 import styles from './CounterSalePage.module.css';
 import { ProxyImage } from '../../components/ProxyImage';
+import { useDialog } from '../../components/DialogProvider';
 
 interface Product {
     id: string;
@@ -60,6 +61,7 @@ function getTodayPlusDays(days: number) {
 
 export default function CounterSalePage() {
     const api = useApi();
+    const { alert: showAlert } = useDialog();
     const [products, setProducts] = useState<Product[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
@@ -181,7 +183,7 @@ export default function CounterSalePage() {
 
             if (!hasRegisteredCustomer && !hasGuestCustomer) {
                 setIsCheckoutConfirmOpen(false);
-                alert('Selecione um cliente cadastrado ou informe um nome para a notinha avulsa.');
+                await showAlert('Selecione um cliente cadastrado ou informe um nome para a notinha avulsa.', { tone: 'warning' });
                 return;
             }
         }
@@ -201,9 +203,9 @@ export default function CounterSalePage() {
             setIsCheckoutConfirmOpen(false);
             setCart([]);
             resetCreditFields();
-            alert(isCreditSale ? 'Notinha criada com sucesso.' : 'Venda registrada com sucesso.');
+            await showAlert(isCreditSale ? 'Notinha criada com sucesso.' : 'Venda registrada com sucesso.', { tone: 'success' });
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setLoading(false);
         }

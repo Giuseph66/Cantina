@@ -1,5 +1,5 @@
 .totemPage {
-    min-height: 100vh;
+    min-height: 100dvh;
     background-color: var(--bg-main);
     color: var(--text-main);
     display: flex;

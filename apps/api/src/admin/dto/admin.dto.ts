@@ -64,6 +64,10 @@ export class CreateProductDto {
     @IsOptional()
     imageUrl?: string;
 
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+
     @IsEnum(StockMode)
     @IsOptional()
     stockMode?: StockMode;
@@ -75,6 +79,12 @@ export class CreateProductDto {
     @IsBoolean()
     @IsOptional()
     isSpecialToday?: boolean;
+
+    @IsInt()
+    @Min(0)
+    @Max(6)
+    @IsOptional()
+    weeklySpecialDay?: number | null;
 }
 
 export class UpdateProductDto {
@@ -117,6 +127,12 @@ export class UpdateProductDto {
     @IsBoolean()
     @IsOptional()
     isSpecialToday?: boolean;
+
+    @IsInt()
+    @Min(0)
+    @Max(6)
+    @IsOptional()
+    weeklySpecialDay?: number | null;
 }
 
 export class UpdateSettingsDto {

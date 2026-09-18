@@ -3,6 +3,7 @@ import { ProxyImage } from '../../components/ProxyImage';
 import { useApi } from '../../hooks/useApi';
 import { Plus, Edit2, Trash2, X, Search, Package, ImageOff } from 'lucide-react';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { useDialog } from '../../components/DialogProvider';
 import { CategoriesManagerModal } from '../../components/admin/CategoriesManagerModal';
 import { StockBulkModal } from '../../components/admin/StockBulkModal';
 import styles from './ProductsPage.module.css';
@@ -12,10 +13,13 @@ interface Product {
     id: string; name: string; priceCents: number; isActive: boolean; categoryId: string;
     stockMode: 'UNLIMITED' | 'CONTROLLED'; stockQty: number; description: string | null; imageUrl: string | null;
     isSpecialToday: boolean;
+    weeklySpecialDay: number | null;
     hasOrderHistory?: boolean;
     category: { name: string };
 }
 interface Category { id: string; name: string; }
+
+const WEEKDAY_NAMES = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
 function formatCurrency(cents: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -30,6 +34,7 @@ function stockLabel(p: Product) {
 
 function ProductsPage() {
     const api = useApi();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
@@ -45,7 +50,8 @@ function ProductsPage() {
 
     const initialForm = {
         name: '', description: '', priceCentsStr: '', categoryId: '',
-        stockMode: 'UNLIMITED' as 'UNLIMITED' | 'CONTROLLED', stockQty: 0, isActive: true, imageUrl: '', isSpecialToday: false
+        stockMode: 'UNLIMITED' as 'UNLIMITED' | 'CONTROLLED', stockQty: 0, isActive: true, imageUrl: '', isSpecialToday: false,
+        weeklySpecialDay: null as number | null,
     };
     const [formData, setFormData] = useState(initialForm);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -97,22 +103,23 @@ function ProductsPage() {
             name: p.name, description: p.description || '',
             priceCentsStr: (p.priceCents / 100).toFixed(2),
             categoryId: p.categoryId, stockMode: p.stockMode,
-            stockQty: p.stockQty, isActive: p.isActive, imageUrl: p.imageUrl || '', isSpecialToday: p.isSpecialToday
+            stockQty: p.stockQty, isActive: p.isActive, imageUrl: p.imageUrl || '', isSpecialToday: p.isSpecialToday,
+            weeklySpecialDay: p.weeklySpecialDay,
         });
         setSelectedFile(null);
         setIsModalOpen(true);
     };
 
     const handleDeactivate = async (id: string, name: string) => {
-        if (!window.confirm(`Desativar o produto "${name}"?`)) return;
+        if (!await showConfirm(`Desativar o produto "${name}"?`)) return;
         try {
             await api.delete(`/admin/products/${id}`);
             fetchData();
-        } catch (err: any) { alert(err.message); }
+        } catch (err: any) { await showAlert(err.message, { tone: 'error' }); }
     };
 
     const handleHardDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Excluir definitivamente o produto inativo "${name}"? Essa ação não pode ser desfeita.`)) return;
+        if (!await showConfirm(`Excluir definitivamente o produto inativo "${name}"? Essa ação não pode ser desfeita.`, { confirmLabel: 'Excluir definitivamente' })) return;
         try {
             await api.delete(`/admin/products/${id}`);
             if (editingId === id) {
@@ -122,10 +129,10 @@ function ProductsPage() {
         } catch (err: any) {
             const message = String(err?.message ?? '');
             if (message.includes('[409]')) {
-                alert('Não foi possível excluir definitivamente: este produto já tem histórico de pedidos. Ele pode permanecer apenas como inativo.');
+            await showAlert('Não foi possível excluir definitivamente: este produto já tem histórico de pedidos. Ele pode permanecer apenas como inativo.', { tone: 'warning' });
                 return;
             }
-            alert(message || 'Falha ao excluir produto.');
+            await showAlert(message || 'Falha ao excluir produto.', { tone: 'error' });
         }
     };
 
@@ -155,6 +162,7 @@ function ProductsPage() {
                 stockQty: formData.stockMode === 'CONTROLLED' ? formData.stockQty : undefined,
                 isActive: formData.isActive,
                 isSpecialToday: formData.isSpecialToday,
+                weeklySpecialDay: formData.weeklySpecialDay,
                 imageUrl: uploadedUrl || undefined
             };
             if (editingId) {
@@ -165,19 +173,15 @@ function ProductsPage() {
             setIsModalOpen(false);
             fetchData();
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSaving(false);
         }
     };
 
     const handleBulkStockSave = async (updates: { productId: string; qty: number }[]) => {
-        try {
-            await api.patch('/admin/products/bulk-stock', { items: updates });
-            fetchData();
-        } catch (err: any) {
-            throw err;
-        }
+        await api.patch('/admin/products/bulk-stock', { items: updates });
+        fetchData();
     };
 
     const handleCloseCategoriesModal = async () => {
@@ -286,6 +290,9 @@ function ProductsPage() {
                                     <h3 className={styles.cardName}>{p.name}</h3>
                                     {p.isSpecialToday && (
                                         <span className={styles.badgeSpecial}>Especial de Hoje</span>
+                                    )}
+                                    {p.weeklySpecialDay !== null && (
+                                        <span className={styles.badgeSpecial}>Especial de {WEEKDAY_NAMES[p.weeklySpecialDay]}</span>
                                     )}
                                 </div>
                                 {p.description && <p className={styles.cardDesc}>{p.description}</p>}
@@ -457,6 +464,23 @@ function ProductsPage() {
                                         <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600 }}>Este item aparece na categoria “Especiais de Hoje” da tela inicial.</div>
                                     </div>
                                 </label>
+
+                                <div className={adminStyles.formGroup} style={{ background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '1.25rem' }}>
+                                    <label className={adminStyles.label} style={{ fontWeight: 900, color: 'var(--primary)' }}>ESPECIAL DA SEMANA</label>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '0.75rem' }}>
+                                        Escolha o dia da semana em que este item é o especial. Nos outros dias, ele aparece no fim do cardápio como esgotado.
+                                    </div>
+                                    <select
+                                        className={adminStyles.input}
+                                        value={formData.weeklySpecialDay === null ? '' : formData.weeklySpecialDay}
+                                        onChange={e => setFormData({ ...formData, weeklySpecialDay: e.target.value === '' ? null : Number(e.target.value) })}
+                                    >
+                                        <option value="">Nenhum</option>
+                                        {WEEKDAY_NAMES.map((name, idx) => (
+                                            <option key={idx} value={idx}>{name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
                                 {editingId && (
                                     <label className={adminStyles.checkboxLabel} style={{ background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '1.25rem' }}>

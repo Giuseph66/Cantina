@@ -9,9 +9,9 @@ export interface CartItem {
 
 interface CartContextValue {
     items: CartItem[];
-    add: (item: Omit<CartItem, 'qty'>) => void;
+    add: (item: Omit<CartItem, 'qty'>, maxQty?: number) => void;
     remove: (productId: string) => void;
-    setQty: (productId: string, qty: number) => void;
+    setQty: (productId: string, qty: number, maxQty?: number) => void;
     clear: () => void;
     totalCents: number;
     count: number;
@@ -44,11 +44,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     }, [items, isInitialized]);
 
-    const add = useCallback((item: Omit<CartItem, 'qty'>) => {
+    const add = useCallback((item: Omit<CartItem, 'qty'>, maxQty?: number) => {
         setItems((prev) => {
             const existing = prev.find((i) => i.productId === item.productId);
-            if (existing) return prev.map((i) => i.productId === item.productId ? { ...i, qty: i.qty + 1 } : i);
-            return [...prev, { ...item, qty: 1 }];
+            const nextQty = (existing?.qty ?? 0) + 1;
+            const cappedQty = maxQty !== undefined ? Math.min(nextQty, maxQty) : nextQty;
+            if (existing) {
+                if (cappedQty === existing.qty) return prev;
+                return prev.map((i) => i.productId === item.productId ? { ...i, qty: cappedQty } : i);
+            }
+            if (maxQty !== undefined && maxQty <= 0) return prev;
+            return [...prev, { ...item, qty: cappedQty }];
         });
     }, []);
 
@@ -56,9 +62,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setItems((prev) => prev.filter((i) => i.productId !== productId));
     }, []);
 
-    const setQty = useCallback((productId: string, qty: number) => {
-        if (qty <= 0) { remove(productId); return; }
-        setItems((prev) => prev.map((i) => i.productId === productId ? { ...i, qty } : i));
+    const setQty = useCallback((productId: string, qty: number, maxQty?: number) => {
+        const cappedQty = maxQty !== undefined ? Math.min(qty, maxQty) : qty;
+        if (cappedQty <= 0) { remove(productId); return; }
+        setItems((prev) => prev.map((i) => i.productId === productId ? { ...i, qty: cappedQty } : i));
     }, [remove]);
 
     const clear = useCallback(() => setItems([]), []);

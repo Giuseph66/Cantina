@@ -1,6 +1,6 @@
 .modalBody {
     padding: 1.5rem 2rem;
-    max-height: 50vh;
+    max-height: 50dvh;
     overflow-y: auto;
     background: var(--bg-main);
 }

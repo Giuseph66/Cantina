@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Save, Plus, Minus, Package } from 'lucide-react';
 import adminStyles from '../../pages/admin/Admin.module.css';
+import { useDialog } from '../DialogProvider';
 import styles from './StockBulkModal.module.css';
 
 interface Product {
@@ -20,6 +21,7 @@ interface StockBulkModalProps {
 
 export function StockBulkModal({ isOpen, onClose, products, onSave }: StockBulkModalProps) {
     const controlledProducts = products.filter(p => p.stockMode === 'CONTROLLED');
+    const { alert: showAlert } = useDialog();
     const [entries, setEntries] = useState<Record<string, number>>({});
     const [saving, setSaving] = useState(false);
 
@@ -45,7 +47,7 @@ export function StockBulkModal({ isOpen, onClose, products, onSave }: StockBulkM
             setEntries({});
             onClose();
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSaving(false);
         }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { useDialog } from '../../components/DialogProvider';
 import { UserPlus, ShieldCheck, ShoppingBag, CookingPot, Crown, UserX, UserCheck, Search, Pencil } from 'lucide-react';
 import styles from './UsersPage.module.css';
 
@@ -35,6 +36,7 @@ const EMPTY_CREATE = { name: '', email: '', password: '', cpf: '', phone: '', ro
 
 export default function UsersPage() {
     const api = useApi();
+    const { alert: showAlert } = useDialog();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -129,7 +131,7 @@ export default function UsersPage() {
             const updated = await api.patch<User>(endpoint, {});
             setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: updated.isActive } : u));
         } catch (err: any) {
-            alert(err.message.replace(/^\[\d{3}\]\s*/, ''));
+            await showAlert(err.message.replace(/^\[\d{3}\]\s*/, ''), { tone: 'error' });
         }
     }
 

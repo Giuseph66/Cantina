@@ -152,6 +152,15 @@
     border-color: rgba(93, 64, 55, 0.2);
 }
 
+.customerCard:focus-visible,
+.selectableNote:focus-visible,
+.filterTab:focus-visible,
+.actionBtn:focus-visible,
+.modalClose:focus-visible {
+    outline: 3px solid rgba(188, 142, 92, 0.55);
+    outline-offset: 2px;
+}
+
 .customerCardHeader {
     display: flex;
     align-items: flex-start;
@@ -200,17 +209,16 @@
 
 .modalOverlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
+    width: 100%;
+    min-height: 100dvh;
     background: rgba(93, 64, 55, 0.4);
     backdrop-filter: blur(8px);
     z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5rem;
+    padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
 }
 
 .modalContent {
@@ -218,7 +226,7 @@
     border-radius: 1.5rem;
     width: 100%;
     max-width: 600px;
-    max-height: 90vh;
+    max-height: 90dvh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 35px 70px rgba(93, 64, 55, 0.2);
@@ -410,4 +418,27 @@
     .modalFooterActions {
         grid-template-columns: 1fr;
     }
+}
+
+@media (max-width: 640px) {
+    .page { gap: 0.9rem; }
+    .metricsGrid { gap: 0.65rem; }
+    .metricCard { padding: 0.9rem; border-radius: 1rem; }
+    .metricValue { font-size: 1.35rem; }
+    .toolbar { padding: 0.9rem; }
+    .filterTabs { gap: 0.5rem; margin-right: -0.9rem; padding-right: 0.9rem; }
+    .groupedList { grid-template-columns: 1fr; gap: 0.75rem; padding: 0.75rem; }
+    .customerCard { padding: 0.95rem; }
+    .modalOverlay { align-items: flex-end; padding: 0; }
+    .modalContent {
+        max-height: 92dvh;
+        border-radius: 1.3rem 1.3rem 0 0;
+    }
+    .modalHeader {
+        padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem 0.9rem;
+    }
+    .modalBody { padding: 1rem; }
+    .modalFooter { padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px)); }
+    .selectableNote { gap: 0.7rem; padding: 0.9rem; }
+    .selectableNoteHeader { gap: 0.5rem; flex-wrap: wrap; }
 }

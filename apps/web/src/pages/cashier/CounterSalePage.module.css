@@ -303,7 +303,7 @@
     top: 5.5rem;
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 7rem);
+    max-height: calc(100dvh - 7rem);
     min-height: 0;
     overflow: hidden;
 }
@@ -561,7 +561,7 @@
 
 .footer {
     margin-top: auto;
-    padding: 1.2rem 1.35rem 1.35rem;
+    padding: 1.2rem 1.35rem calc(1.35rem + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(93, 64, 55, 0.08);
     background: linear-gradient(180deg, rgba(248, 243, 236, 0.4), rgba(248, 243, 236, 0.88));
     border-bottom-left-radius: 1.5rem;
@@ -627,7 +627,7 @@
     z-index: 1200;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
 }
 
 .checkoutConfirmOverlayOpen {

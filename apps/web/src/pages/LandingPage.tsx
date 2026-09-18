@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { ProxyImage } from '../components/ProxyImage';
 import { useApi } from '../hooks/useApi';
-import { Utensils, ChevronRight, Plus, Minus, Zap, ShoppingBag, Store } from 'lucide-react';
+import { Utensils, ChevronRight, Plus, Minus, Zap, ShoppingBag, Store, CalendarDays } from 'lucide-react';
 import styles from './LandingPage.module.css';
 
 interface Category { id: string; name: string; }
@@ -13,7 +13,12 @@ interface Product {
     stockMode: 'UNLIMITED' | 'CONTROLLED'; stockQty: number;
     categoryId: string;
     isSpecialToday: boolean;
+    weeklySpecialDay: number | null;
+    isWeeklySpecialToday: boolean;
+    isWeeklySpecialPending: boolean;
 }
+
+const WEEKDAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 function formatCurrency(cents: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -58,7 +63,9 @@ export default function LandingPage() {
         if (activeTab === null) {
             matchesTab = true;
         } else if (activeTab === 'especiais') {
-            matchesTab = p.isSpecialToday;
+            matchesTab = p.isSpecialToday || p.isWeeklySpecialToday;
+        } else if (activeTab === 'semana') {
+            matchesTab = p.weeklySpecialDay !== null;
         } else {
             matchesTab = p.categoryId === activeTab;
         }
@@ -67,8 +74,16 @@ export default function LandingPage() {
             (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
         return matchesTab && matchesSearch;
     }).sort((a, b) => {
-        if (a.isSpecialToday === b.isSpecialToday) return 0;
-        return a.isSpecialToday ? -1 : 1;
+        if (activeTab === 'semana') {
+            return (a.weeklySpecialDay ?? 0) - (b.weeklySpecialDay ?? 0);
+        }
+        if (a.isSpecialToday !== b.isSpecialToday) {
+            return a.isSpecialToday ? -1 : 1;
+        }
+        if (a.isWeeklySpecialPending !== b.isWeeklySpecialPending) {
+            return a.isWeeklySpecialPending ? 1 : -1;
+        }
+        return 0;
     });
 
     // Close modal on escape
@@ -103,6 +118,13 @@ export default function LandingPage() {
                             >
                                 <Store size={18} />
                                 Especiais de Hoje
+                            </button>
+                            <button
+                                className={`${styles.sidebarItem} ${activeTab === 'semana' ? styles.active : ''}`}
+                                onClick={() => setActiveTab('semana')}
+                            >
+                                <CalendarDays size={18} />
+                                Especiais da Semana
                             </button>
                             {categories.map(c => (
                                 <button
@@ -148,6 +170,12 @@ export default function LandingPage() {
                             >
                                 ✨ Especiais
                             </button>
+                            <button
+                                className={`${styles.pill} ${activeTab === 'semana' ? styles.active : ''}`}
+                                onClick={() => setActiveTab('semana')}
+                            >
+                                📅 Da Semana
+                            </button>
                             {categories.map(c => (
                                 <button
                                     key={c.id}
@@ -161,7 +189,7 @@ export default function LandingPage() {
 
                         {/* PRODUCT GRID SECTION */}
                         <div className={styles.sectionHeader}>
-                            <h3>{searchTerm ? `Resultados para "${searchTerm}"` : (activeTab === 'especiais' ? 'Especiais de Hoje' : (activeTab ? categories.find(c => c.id === activeTab)?.name : 'Populares'))}</h3>
+                            <h3>{searchTerm ? `Resultados para "${searchTerm}"` : (activeTab === 'especiais' ? 'Especiais de Hoje' : (activeTab === 'semana' ? 'Especiais da Semana' : (activeTab ? categories.find(c => c.id === activeTab)?.name : 'Populares')))}</h3>
                             <span className={styles.itemCount}>{visibleProducts.length} itens</span>
                         </div>
 
@@ -172,8 +200,10 @@ export default function LandingPage() {
                         ) : (
                             <div className={styles.productGrid}>
                                 {visibleProducts.map(p => {
-                                    const isUnavailable = p.stockMode === 'CONTROLLED' && p.stockQty <= 0;
+                                    const isUnavailable = (p.stockMode === 'CONTROLLED' && p.stockQty <= 0) || p.isWeeklySpecialPending;
                                     const cartQty = cartQtyByProduct.get(p.id) ?? 0;
+                                    const maxQty = p.stockMode === 'CONTROLLED' ? p.stockQty : undefined;
+                                    const atMax = maxQty !== undefined && cartQty >= maxQty;
 
                                     return (
                                         <div
@@ -189,7 +219,16 @@ export default function LandingPage() {
                                                         <Utensils size={32} opacity={0.2} />
                                                     </div>
                                                 )}
-                                                {isUnavailable && <div className={styles.soldOutBadge}>Esgotado</div>}
+                                                {activeTab === 'semana' && p.weeklySpecialDay !== null && (
+                                                    <div className={styles.weekdayBadge}>Especial de {WEEKDAY_NAMES[p.weeklySpecialDay]}</div>
+                                                )}
+                                                {isUnavailable && (
+                                                    <div className={styles.soldOutBadge}>
+                                                        {p.isWeeklySpecialPending && p.weeklySpecialDay !== null
+                                                            ? `Disponível ${WEEKDAY_NAMES[p.weeklySpecialDay]}`
+                                                            : 'Esgotado'}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className={styles.productInfo}>
@@ -201,11 +240,11 @@ export default function LandingPage() {
 
                                                     {cartQty > 0 ? (
                                                         <div className={styles.qtyControls} onClick={(e) => e.stopPropagation()}>
-                                                            <button className={styles.qtyBtn} onClick={() => setQty(p.id, cartQty - 1)}>
+                                                            <button className={styles.qtyBtn} onClick={() => setQty(p.id, cartQty - 1, maxQty)}>
                                                                 <Minus size={22} strokeWidth={3} />
                                                             </button>
                                                             <span className={styles.qtyValue}>{cartQty}</span>
-                                                            <button className={styles.qtyBtn} onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents })} disabled={isUnavailable}>
+                                                            <button className={styles.qtyBtn} onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents }, maxQty)} disabled={isUnavailable || atMax}>
                                                                 <Plus size={22} strokeWidth={3} />
                                                             </button>
                                                         </div>
@@ -214,7 +253,7 @@ export default function LandingPage() {
                                                             className={styles.addBtn}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                add({ productId: p.id, name: p.name, priceCents: p.priceCents });
+                                                                add({ productId: p.id, name: p.name, priceCents: p.priceCents }, maxQty);
                                                             }}
                                                             disabled={isUnavailable}
                                                         >
@@ -271,8 +310,12 @@ export default function LandingPage() {
 
                             <button
                                 className={styles.modalAddBtn}
+                                disabled={selectedProduct.stockMode === 'CONTROLLED' && (cartQtyByProduct.get(selectedProduct.id) ?? 0) >= selectedProduct.stockQty}
                                 onClick={() => {
-                                    add({ productId: selectedProduct.id, name: selectedProduct.name, priceCents: selectedProduct.priceCents });
+                                    add(
+                                        { productId: selectedProduct.id, name: selectedProduct.name, priceCents: selectedProduct.priceCents },
+                                        selectedProduct.stockMode === 'CONTROLLED' ? selectedProduct.stockQty : undefined,
+                                    );
                                     setSelectedProduct(null); // Fecha o modal após adicionar
                                 }}
                             >

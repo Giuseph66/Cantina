@@ -114,6 +114,8 @@ function normalizeQrCodeImageSrc(value: string | null) {
     return `data:image/png;base64,${normalized}`;
 }
 
+type ProductStock = { stockMode: 'UNLIMITED' | 'CONTROLLED'; stockQty: number };
+
 export default function CheckoutPage() {
     const { items, totalCents, remove, setQty, clear } = useCart();
     const api = useApi();
@@ -122,6 +124,9 @@ export default function CheckoutPage() {
     const { user, updateProfile } = useAuth();
     const resumeOrderId = searchParams.get('orderId');
     const isResumingOrder = !!resumeOrderId;
+
+    const [stockByProduct, setStockByProduct] = useState<Map<string, ProductStock>>(new Map());
+    const [stockAdjustedNotice, setStockAdjustedNotice] = useState('');
 
 
     const [config, setConfig] = useState<PaymentConfig>({
@@ -218,6 +223,41 @@ export default function CheckoutPage() {
     useEffect(() => {
         onlineMethodRef.current = onlineMethod;
     }, [onlineMethod]);
+
+    useEffect(() => {
+        if (items.length === 0) return;
+
+        let cancelled = false;
+        api.get<Array<{ id: string; stockMode: 'UNLIMITED' | 'CONTROLLED'; stockQty: number }>>('/catalog/products')
+            .then((products) => {
+                if (cancelled) return;
+                const map = new Map<string, ProductStock>(
+                    products.map((p) => [p.id, { stockMode: p.stockMode, stockQty: p.stockQty }]),
+                );
+                setStockByProduct(map);
+
+                const adjusted: string[] = [];
+                for (const item of items) {
+                    const stock = map.get(item.productId);
+                    if (!stock || stock.stockMode !== 'CONTROLLED') continue;
+                    if (item.qty > stock.stockQty) {
+                        adjusted.push(
+                            stock.stockQty > 0
+                                ? `${item.name} (deixamos ${stock.stockQty} unidade${stock.stockQty > 1 ? 's' : ''}, que é o que temos agora)`
+                                : `${item.name} (esgotou enquanto você montava o pedido)`,
+                        );
+                        setQty(item.productId, stock.stockQty);
+                    }
+                }
+                if (adjusted.length > 0) {
+                    setStockAdjustedNotice(`${adjusted.join(' e ')}. Dá uma conferida antes de continuar.`);
+                }
+            })
+            .catch((err) => console.error('[Checkout] Falha ao verificar estoque', err));
+
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         api.get<PaymentConfig>('/payments/public-config')
@@ -465,27 +505,41 @@ export default function CheckoutPage() {
                         <ShoppingBag size={20} strokeWidth={2.5} /> Resumo do Pedido
                     </h2>
                     <div className={styles.cartSection}>
+                        {stockAdjustedNotice && (
+                            <div className={styles.infoBox}>
+                                <div className={styles.infoBoxTitle}>
+                                    <AlertCircle size={18} strokeWidth={2.5} />
+                                    Ajustamos seu pedido
+                                </div>
+                                <p className={styles.infoBoxText}>{stockAdjustedNotice}</p>
+                            </div>
+                        )}
                         <ul className={styles.itemList}>
-                            {items.map((item) => (
-                                <li key={item.productId} className={styles.item}>
-                                    <div className={styles.itemInfo}>
-                                        <div className={styles.itemName}>{item.name}</div>
-                                        <div className={styles.itemPrice}>{formatCurrency(item.priceCents)}</div>
-                                    </div>
-                                    <div className={styles.qtyControls}>
-                                        <button onClick={() => setQty(item.productId, item.qty - 1)} disabled={item.qty <= 1}>
-                                            <Minus size={16} strokeWidth={3} />
-                                        </button>
-                                        <span className={styles.qtyValue}>{item.qty}</span>
-                                        <button onClick={() => setQty(item.productId, item.qty + 1)}>
-                                            <Plus size={16} strokeWidth={3} />
-                                        </button>
-                                        <button className={styles.removeBtn} onClick={() => remove(item.productId)}>
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </li>
-                            ))}
+                            {items.map((item) => {
+                                const stock = stockByProduct.get(item.productId);
+                                const maxQty = stock?.stockMode === 'CONTROLLED' ? stock.stockQty : undefined;
+                                const atMax = maxQty !== undefined && item.qty >= maxQty;
+                                return (
+                                    <li key={item.productId} className={styles.item}>
+                                        <div className={styles.itemInfo}>
+                                            <div className={styles.itemName}>{item.name}</div>
+                                            <div className={styles.itemPrice}>{formatCurrency(item.priceCents)}</div>
+                                        </div>
+                                        <div className={styles.qtyControls}>
+                                            <button onClick={() => setQty(item.productId, item.qty - 1)} disabled={item.qty <= 1}>
+                                                <Minus size={16} strokeWidth={3} />
+                                            </button>
+                                            <span className={styles.qtyValue}>{item.qty}</span>
+                                            <button onClick={() => setQty(item.productId, item.qty + 1, maxQty)} disabled={atMax}>
+                                                <Plus size={16} strokeWidth={3} />
+                                            </button>
+                                            <button className={styles.removeBtn} onClick={() => remove(item.productId)}>
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </li>
+                                );
+                            })}
                         </ul>
                         <div className={styles.totalRow}>
                             <span>Total</span>

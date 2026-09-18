@@ -276,6 +276,8 @@ export class CreditNotesService {
         let remainingAmount = dto.amountCents ?? notes.reduce((sum, n) => sum + (n.totalCents - n.paidCents), 0);
         const settledAt = new Date();
 
+        const auditEntries: { entityId: string; payload: Record<string, unknown> }[] = [];
+
         const result = await this.prisma.$transaction(async (tx) => {
             const updatedNotes = [];
             let totalProcessedCents = 0;
@@ -323,12 +325,15 @@ export class CreditNotesService {
                     },
                 });
 
-                await this.audit.log(actorUserId, 'CREDIT_NOTE_PARTIAL_SETTLED', 'CreditNote', note.id, {
-                    orderId: note.orderId,
-                    amountAppliedCents: amountToApply,
-                    newPaidCents,
-                    paymentMethod: dto.paymentMethod,
-                    isFullyPaid,
+                auditEntries.push({
+                    entityId: note.id,
+                    payload: {
+                        orderId: note.orderId,
+                        amountAppliedCents: amountToApply,
+                        newPaidCents,
+                        paymentMethod: dto.paymentMethod,
+                        isFullyPaid,
+                    },
                 });
 
                 remainingAmount -= amountToApply;
@@ -341,6 +346,10 @@ export class CreditNotesService {
                 notes: updatedNotes,
             };
         });
+
+        for (const entry of auditEntries) {
+            await this.audit.log(actorUserId, 'CREDIT_NOTE_PARTIAL_SETTLED', 'CreditNote', entry.entityId, entry.payload);
+        }
 
         return result;
     }

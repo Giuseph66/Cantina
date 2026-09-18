@@ -172,7 +172,7 @@ describe('AuthService', () => {
         expect(prisma.user.update).toHaveBeenCalled();
     });
 
-    it('deve bloquear vínculo Google em usuário interno com mesmo e-mail', async () => {
+    it('deve vincular login Google em usuário interno com mesmo e-mail', async () => {
         jest.spyOn(service as any, 'verifyGoogleCredential').mockResolvedValue({
             sub: 'google-sub-1',
             email: 'admin@cantina.local',
@@ -185,8 +185,50 @@ describe('AuthService', () => {
         prisma.user.findUnique
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce(mockUser);
+        prisma.user.update.mockResolvedValue({
+            ...mockUser,
+            googleSub: 'google-sub-1',
+            name: 'Admin Google',
+            lastLoginAt: new Date(),
+        });
 
-        await expect(service.loginWithGoogle('credential')).rejects.toThrow(ForbiddenException);
+        const result = await service.loginWithGoogle('credential');
+
+        expect(result.user.id).toBe(mockUser.id);
+        expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: mockUser.id },
+            data: expect.objectContaining({ googleSub: 'google-sub-1' }),
+        }));
+    });
+
+    it('deve permitir login Google posterior em usuário interno vinculado', async () => {
+        const linkedAdmin = {
+            ...mockUser,
+            googleSub: 'google-sub-1',
+        };
+
+        jest.spyOn(service as any, 'verifyGoogleCredential').mockResolvedValue({
+            sub: 'google-sub-1',
+            email: 'admin@cantina.local',
+            email_verified: true,
+            iss: 'https://accounts.google.com',
+            name: 'Admin Google',
+            picture: null,
+        });
+
+        prisma.user.findUnique.mockResolvedValueOnce(linkedAdmin);
+        prisma.user.update.mockResolvedValue({
+            ...linkedAdmin,
+            name: 'Admin Google',
+            lastLoginAt: new Date(),
+        });
+
+        const result = await service.loginWithGoogle('credential');
+
+        expect(result.user.id).toBe(mockUser.id);
+        expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: mockUser.id },
+        }));
     });
 
     it('deve falhar quando o e-mail já estiver vinculado a outro Google', async () => {

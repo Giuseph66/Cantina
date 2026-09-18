@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ProxyImage } from '../../components/ProxyImage';
 import { useApi } from '../../hooks/useApi';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { useDialog } from '../../components/DialogProvider';
 import {
     CalendarRange,
     CheckCheck,
@@ -123,6 +124,7 @@ function needsPickup(order: Order) {
 
 export default function OrdersPage() {
     const api = useApi();
+    const { alert: showAlert } = useDialog();
     const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [error, setError] = useState('');
@@ -227,7 +229,7 @@ export default function OrdersPage() {
             await api.patch(`/admin/orders/${orderId}/status`, { status });
             await fetchOrders(true);
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setUpdating(null);
         }

@@ -3,7 +3,7 @@ import { Header } from './Header';
 
 export default function ClientLayout() {
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
             <Header />
             <main style={{ flex: 1 }}>
                 <Outlet />

@@ -114,15 +114,6 @@ export class AuthService {
                 const existingByGoogleSub = await tx.user.findUnique({ where: { googleSub } });
 
                 if (existingByGoogleSub) {
-                    if (existingByGoogleSub.role !== Role.CLIENT) {
-                        conflictLogPayload = {
-                            reason: 'internal_role_with_google_sub',
-                            email: normalizedEmail,
-                            role: existingByGoogleSub.role,
-                        };
-                        throw new ForbiddenException('Login com Google está disponível apenas para clientes.');
-                    }
-
                     if (!existingByGoogleSub.isActive) {
                         throw new ForbiddenException('Usuário desativado. Entre em contato com o administrador.');
                     }
@@ -155,16 +146,6 @@ export class AuthService {
 
                 const existingByEmail = await tx.user.findUnique({ where: { email: normalizedEmail } });
                 if (existingByEmail) {
-                    if (existingByEmail.role !== Role.CLIENT) {
-                        conflictLogPayload = {
-                            reason: 'email_belongs_to_internal_user',
-                            email: normalizedEmail,
-                            targetUserId: existingByEmail.id,
-                            role: existingByEmail.role,
-                        };
-                        throw new ForbiddenException('Este e-mail pertence a um usuário interno e não pode ser vinculado pelo Google.');
-                    }
-
                     if (existingByEmail.googleSub && existingByEmail.googleSub !== googleSub) {
                         conflictLogPayload = {
                             reason: 'email_already_linked_to_other_google_account',

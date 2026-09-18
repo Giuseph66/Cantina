@@ -1,5 +1,5 @@
 .page {
-    min-height: 100vh;
+    min-height: 100dvh;
     background-color: var(--bg-main);
     color: var(--text-main);
     padding: 2rem;
@@ -269,7 +269,7 @@
 }
 
 .cornerBottomLeft {
-    bottom: 0.8rem;
+    bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px));
     left: 0.8rem;
     border-width: 0 0 4px 4px;
     border-bottom-left-radius: 1rem;
@@ -277,7 +277,7 @@
 
 .cornerBottomRight {
     right: 0.8rem;
-    bottom: 0.8rem;
+    bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px));
     border-width: 0 4px 4px 0;
     border-bottom-right-radius: 1rem;
 }

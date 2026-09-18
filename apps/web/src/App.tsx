@@ -7,6 +7,7 @@ import { useApi } from './hooks/useApi';
 import ServerDownScreen from './components/ServerDownScreen';
 import { onRecovered } from './lib/server-status';
 import { useEffect, useState } from 'react';
+import { DialogProvider } from './components/DialogProvider';
 
 // Pages — Auth
 import LoginPage from './pages/LoginPage';
@@ -149,14 +150,16 @@ function AppRoutes() {
 
 export default function App() {
     return (
-        <AuthProvider>
-            <CartProvider>
-                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                    <GlobalSyncWorker />
-                    <ServerDownScreen />
-                    <AppRoutes />
-                </BrowserRouter>
-            </CartProvider>
-        </AuthProvider>
+        <DialogProvider>
+            <AuthProvider>
+                <CartProvider>
+                    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                        <GlobalSyncWorker />
+                        <ServerDownScreen />
+                        <AppRoutes />
+                    </BrowserRouter>
+                </CartProvider>
+            </AuthProvider>
+        </DialogProvider>
     );
 }

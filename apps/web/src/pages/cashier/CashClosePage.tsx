@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calculator, CircleDollarSign, Loader2, LogOut, ReceiptText } from 'lucide-react';
 import styles from './CashPage.module.css';
 import { CashierLayout } from '../../components/cashier/CashierLayout';
+import { useDialog } from '../../components/DialogProvider';
 import { useCashSession } from '../../hooks/useCashSession';
 
 function formatCurrency(cents: number) {
@@ -37,6 +38,7 @@ export default function CashClosePage() {
     const api = useApi();
     const navigate = useNavigate();
     const { hasOpenSession, isLoading: isCashLoading } = useCashSession();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
     const [data, setData] = useState<CashCloseData | null>(null);
     const [notes, setNotes] = useState('');
     const [countedCashStr, setCountedCashStr] = useState('');
@@ -69,10 +71,10 @@ export default function CashClosePage() {
         e.preventDefault();
         if (!data) return;
         if (!Number.isFinite(countedCashValue) || countedCashValue < 0) {
-            alert('Informe o valor contado em caixa.');
+            await showAlert('Informe o valor contado em caixa.', { tone: 'warning' });
             return;
         }
-        if (!window.confirm(`Fechar o caixa com ${formatCurrency(countedCashCents)} em dinheiro? Diferença: ${hasCountedCash ? formatCurrency(cashDifferenceCents) : 'A conferir'}. A sessão atual será encerrada.`)) return;
+        if (!await showConfirm(`Fechar o caixa com ${formatCurrency(countedCashCents)} em dinheiro? Diferença: ${hasCountedCash ? formatCurrency(cashDifferenceCents) : 'A conferir'}. A sessão atual será encerrada.`, { confirmLabel: 'Fechar caixa' })) return;
 
         setSubmitting(true);
         try {
@@ -83,12 +85,12 @@ export default function CashClosePage() {
                 notes,
                 countedCashCents,
             });
-            alert(
+            await showAlert(
                 `Caixa fechado. Esperado: ${formatCurrency(res.summary.expectedCashCents)} | Contado: ${formatCurrency(res.session.countedCashCents)} | Diferença: ${formatCurrency(res.session.cashDifferenceCents)}`,
             );
             navigate('/cashier/cash-open');
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSubmitting(false);
         }

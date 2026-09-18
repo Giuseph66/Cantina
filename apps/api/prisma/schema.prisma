@@ -71,6 +71,7 @@ model Product {
   categoryId  String   @map("category_id")
   imageUrl    String?  @map("image_url")
   isSpecialToday Boolean @default(false) @map("is_special_today")
+  weeklySpecialDay Int? @map("weekly_special_day")
   isActive    Boolean  @default(true) @map("is_active")
   stockMode   String   @default("UNLIMITED") @map("stock_mode")
   stockQty    Int      @default(0) @map("stock_qty")

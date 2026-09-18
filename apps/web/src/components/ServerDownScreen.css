@@ -145,7 +145,7 @@
 .server-back {
     position: fixed;
     left: 50%;
-    bottom: 1.5rem;
+    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
     z-index: 9999;
     transform: translateX(-50%);
     display: flex;

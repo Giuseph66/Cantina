@@ -5,6 +5,7 @@ import {
     RotateCcw, Clock, Wrench, RefreshCw, Ticket, Filter, X, Database, Play, Download,
 } from 'lucide-react';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { useDialog } from '../../components/DialogProvider';
 import styles from './SettingsPage.module.css';
 
 type Tab = 'geral' | 'operacao' | 'auditoria' | 'backups';
@@ -202,6 +203,7 @@ function Toggle({ checked, onChange, label, description }: {
 
 export default function SettingsPage() {
     const api = useApi();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
     const [tab, setTab] = useState<Tab>('geral');
     const [settings, setSettings] = useState<Settings>({
         ticketWindowMinutes: 30,
@@ -311,16 +313,16 @@ export default function SettingsPage() {
 
     async function handleRunBackup() {
         if (backupProgress?.status === 'RUNNING') {
-            alert('Já existe uma operação em andamento.');
+                await showAlert('Já existe uma operação em andamento.', { tone: 'warning' });
             return;
         }
         setBackupRunning(true);
         try {
             await api.post('/admin/backups/run', {});
             await loadBackups();
-            alert('Backup executado com sucesso.');
+                await showAlert('Backup executado com sucesso.', { tone: 'success' });
         } catch (err: any) {
-            alert(err.message.replace(/^\[\d{3}\]\s*/, ''));
+            await showAlert(err.message.replace(/^\[\d{3}\]\s*/, ''), { tone: 'error' });
         } finally {
             setBackupRunning(false);
             try {
@@ -334,15 +336,15 @@ export default function SettingsPage() {
 
     async function handleRestoreBackup(backup: BackupEntry) {
         if (backupProgress?.status === 'RUNNING') {
-            alert('Já existe uma operação em andamento.');
+                await showAlert('Já existe uma operação em andamento.', { tone: 'warning' });
             return;
         }
         if (backup.status !== 'COMPLETED') {
-            alert('Somente backups concluídos podem ser restaurados.');
+                await showAlert('Somente backups concluídos podem ser restaurados.', { tone: 'warning' });
             return;
         }
 
-        const shouldRestore = window.confirm(
+        const shouldRestore = await showConfirm(
             `Restaurar o backup ${backup.id}?\n\nIsso sobrescreve dados atuais e arquivos de imagem.`,
         );
         if (!shouldRestore) return;
@@ -351,9 +353,9 @@ export default function SettingsPage() {
         try {
             await api.post(`/admin/backups/${backup.id}/restore`, {});
             await loadBackups();
-            alert('Backup restaurado com sucesso.');
+                await showAlert('Backup restaurado com sucesso.', { tone: 'success' });
         } catch (err: any) {
-            alert(err.message.replace(/^\[\d{3}\]\s*/, ''));
+            await showAlert(err.message.replace(/^\[\d{3}\]\s*/, ''), { tone: 'error' });
         } finally {
             setRestoringBackupId(null);
             try {
@@ -374,10 +376,10 @@ export default function SettingsPage() {
         setIsTicketWindowModalOpen(true);
     }
 
-    function applyTicketWindowDraft() {
+    async function applyTicketWindowDraft() {
         if (ticketValidityDraftMode === 'UNTIL_TIME') {
             if (!/^\d{2}:\d{2}$/.test(ticketUntilTimeDraft)) {
-                alert('Informe um horário válido no formato HH:mm.');
+                await showAlert('Informe um horário válido no formato HH:mm.', { tone: 'warning' });
                 return;
             }
 
@@ -392,7 +394,7 @@ export default function SettingsPage() {
 
         const parsedValue = Number.parseInt(ticketWindowDraftValue, 10);
         if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-            alert('Informe um valor válido para a validade do ticket.');
+                await showAlert('Informe um valor válido para a validade do ticket.', { tone: 'warning' });
             return;
         }
 
@@ -401,7 +403,7 @@ export default function SettingsPage() {
             : parsedValue;
 
         if (nextMinutes < 5 || nextMinutes > 1440) {
-            alert('A validade do ticket deve ficar entre 5 minutos e 24 horas.');
+                await showAlert('A validade do ticket deve ficar entre 5 minutos e 24 horas.', { tone: 'warning' });
             return;
         }
 
@@ -422,7 +424,7 @@ export default function SettingsPage() {
             setSaveOk(true);
             setTimeout(() => setSaveOk(false), 2500);
         } catch (err: any) {
-            alert(err.message.replace(/^\[\d{3}\]\s*/, ''));
+            await showAlert(err.message.replace(/^\[\d{3}\]\s*/, ''), { tone: 'error' });
         } finally {
             setSaving(false);
         }

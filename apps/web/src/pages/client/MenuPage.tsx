@@ -61,6 +61,8 @@ export default function MenuPage() {
     const productCards = visibleProducts.map(p => {
         const isUnavailable = p.stockMode === 'CONTROLLED' && p.stockQty <= 0;
         const cartQty = cartQtyByProduct.get(p.id) ?? 0;
+        const maxQty = p.stockMode === 'CONTROLLED' ? p.stockQty : undefined;
+        const atMax = maxQty !== undefined && cartQty >= maxQty;
         return (
             <div
                 key={p.id}
@@ -95,15 +97,15 @@ export default function MenuPage() {
                                 <span className={styles.qtyValue}>{cartQty}</span>
                                 <button type="button" className={styles.qtyBtn}
                                     aria-label={`Adicionar mais uma unidade de ${p.name}`}
-                                    onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents })}
-                                    disabled={isUnavailable}>
+                                    onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents }, maxQty)}
+                                    disabled={isUnavailable || atMax}>
                                     <Plus size={24} strokeWidth={3} />
                                 </button>
                             </div>
                         ) : (
                             <button className={styles.addBtn}
                                 aria-label={`Adicionar ${p.name} ao pedido`}
-                                onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents })}
+                                onClick={() => add({ productId: p.id, name: p.name, priceCents: p.priceCents }, maxQty)}
                                 disabled={isUnavailable}>
                                 <Plus size={28} strokeWidth={3} />
                             </button>

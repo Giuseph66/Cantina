@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-    NotebookText, Search, UserRound, X, CheckSquare, Square
+    Mail, NotebookText, Search, UserRound, X, CheckSquare, Square
 } from 'lucide-react';
 import { CashierLayout } from '../../components/cashier/CashierLayout';
+import { useDialog } from '../../components/DialogProvider';
 import { useApi } from '../../hooks/useApi';
 import styles from './CreditNotesPage.module.css';
 
@@ -75,15 +76,18 @@ function formatDate(date: string | null) {
 interface CustomerGroup {
     customerId: string;
     customerName: string;
-    customerPhone: string;
+    customerContact: string;
     notes: CreditNote[];
     openNotesCount: number;
     openTotalCents: number;
     paidTotalCents: number;
+    settledNotesCount: number;
+    settledTotalCents: number;
 }
 
 export default function CreditNotesPage() {
     const api = useApi();
+    const { alert: showAlert } = useDialog();
     const [notes, setNotes] = useState<CreditNote[]>([]);
     const [summary, setSummary] = useState<Summary | null>(null);
     const [search, setSearch] = useState('');
@@ -94,6 +98,8 @@ export default function CreditNotesPage() {
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerGroup | null>(null);
     const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
     const [customAmountStr, setCustomAmountStr] = useState<string>('');
+    const [customerNotes, setCustomerNotes] = useState<CreditNote[] | null>(null);
+    const [loadingCustomerNotes, setLoadingCustomerNotes] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -126,10 +132,14 @@ export default function CreditNotesPage() {
         for (const note of notes) {
             const id = note.customerUser?.id ?? note.customerName ?? 'avulso';
             const name = note.customerUser?.name ?? note.customerName ?? 'Cliente avulso';
-            const phone = note.customerUser?.email ?? note.customerPhone ?? 'Sem contato';
+            const contact = note.customerUser?.email ?? note.customerPhone ?? 'Sem contato';
 
             if (!groups.has(id)) {
-                groups.set(id, { customerId: id, customerName: name, customerPhone: phone, notes: [], openNotesCount: 0, openTotalCents: 0, paidTotalCents: 0 });
+                groups.set(id, {
+                    customerId: id, customerName: name, customerContact: contact, notes: [],
+                    openNotesCount: 0, openTotalCents: 0, paidTotalCents: 0,
+                    settledNotesCount: 0, settledTotalCents: 0,
+                });
             }
             const group = groups.get(id)!;
             group.notes.push(note);
@@ -137,22 +147,40 @@ export default function CreditNotesPage() {
                 group.openNotesCount += 1;
                 group.openTotalCents += note.totalCents;
                 group.paidTotalCents += note.paidCents;
+            } else if (note.status === 'PAID') {
+                group.settledNotesCount += 1;
+                group.settledTotalCents += note.totalCents;
             }
         }
         return Array.from(groups.values()).sort((a, b) => (b.openTotalCents - b.paidTotalCents) - (a.openTotalCents - a.paidTotalCents));
     }, [notes]);
 
-    const handleSelectCustomer = (group: CustomerGroup) => {
+    const handleSelectCustomer = async (group: CustomerGroup) => {
         setSelectedCustomer(group);
         const openNotes = group.notes.filter(n => n.status === 'OPEN').map(n => n.id);
         setSelectedNoteIds(new Set(openNotes));
         setCustomAmountStr('');
+        setCustomerNotes(null);
+
+        const searchTerm = group.customerContact !== 'Sem contato' ? group.customerContact : group.customerName;
+        setLoadingCustomerNotes(true);
+        try {
+            const allNotes = await api.get<CreditNote[]>(`/credit-notes?search=${encodeURIComponent(searchTerm)}`);
+            const fullHistory = allNotes.filter((n) => (n.customerUser?.id ?? n.customerName ?? 'avulso') === group.customerId);
+            setCustomerNotes(fullHistory);
+            setSelectedNoteIds(new Set(fullHistory.filter((n) => n.status === 'OPEN').map((n) => n.id)));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingCustomerNotes(false);
+        }
     };
 
     const handleCloseModal = () => {
         setSelectedCustomer(null);
         setSelectedNoteIds(new Set());
         setCustomAmountStr('');
+        setCustomerNotes(null);
     };
 
     const toggleNoteSelection = (noteId: string) => {
@@ -166,12 +194,13 @@ export default function CreditNotesPage() {
         setCustomAmountStr('');
     };
 
+    const modalNotes = customerNotes ?? selectedCustomer?.notes ?? [];
+
     const selectedNotesTotalPendingCents = useMemo(() => {
-        if (!selectedCustomer) return 0;
-        return selectedCustomer.notes
+        return modalNotes
             .filter(n => selectedNoteIds.has(n.id))
             .reduce((sum, n) => sum + (n.totalCents - n.paidCents), 0);
-    }, [selectedCustomer, selectedNoteIds]);
+    }, [modalNotes, selectedNoteIds]);
 
     const settleBulk = async (paymentMethod: SettlementMethod) => {
         if (!selectedCustomer || selectedNoteIds.size === 0) return;
@@ -181,12 +210,12 @@ export default function CreditNotesPage() {
             const parsedStr = customAmountStr.replace(',', '.');
             const parsed = parseFloat(parsedStr);
             if (isNaN(parsed) || parsed <= 0) {
-                alert('Valor inválido para pagamento.');
+                await showAlert('Valor inválido para pagamento.', { tone: 'warning' });
                 return;
             }
             amountCents = Math.round(parsed * 100);
             if (amountCents > selectedNotesTotalPendingCents) {
-                alert('O valor informado é maior que o saldo devedor das notinhas selecionadas.');
+                await showAlert('O valor informado é maior que o saldo devedor das notinhas selecionadas.', { tone: 'warning' });
                 return;
             }
         } else {
@@ -203,7 +232,7 @@ export default function CreditNotesPage() {
             handleCloseModal();
             await load();
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSettlingId(null);
         }
@@ -258,7 +287,12 @@ export default function CreditNotesPage() {
 
                     <div className={styles.resultsBar}>
                         <span>{loading ? 'Carregando...' : `${customerGroups.length} cliente(s)`}</span>
-                        <strong>{formatCurrency(customerGroups.reduce((acc, c) => acc + (c.openTotalCents - c.paidTotalCents), 0))}</strong>
+                        <strong>
+                            {formatCurrency(customerGroups.reduce(
+                                (acc, c) => acc + (filter === 'PAID' ? c.settledTotalCents : c.openTotalCents - c.paidTotalCents),
+                                0,
+                            ))}
+                        </strong>
                     </div>
 
                     {loading ? (
@@ -275,20 +309,38 @@ export default function CreditNotesPage() {
                                     key={group.customerId}
                                     className={styles.customerCard}
                                     onClick={() => handleSelectCustomer(group)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            handleSelectCustomer(group);
+                                        }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Abrir notinhas de ${group.customerName}`}
                                 >
                                     <div className={styles.customerCardHeader}>
                                         <div>
                                             <h3 className={styles.customerCardName}>{group.customerName}</h3>
                                             <p className={styles.customerCardPhone}>
-                                                <UserRound size={14} />
-                                                {group.customerPhone}
+                                                {group.customerContact.includes('@') ? <Mail size={14} /> : <UserRound size={14} />}
+                                                {group.customerContact}
                                             </p>
                                         </div>
                                     </div>
 
                                     <div className={styles.customerCardStats}>
-                                        <strong className={styles.customerCardTotal}>{formatCurrency(group.openTotalCents - group.paidTotalCents)}</strong>
-                                        <span className={styles.customerCardCount}>{group.openNotesCount} notinhas pendentes</span>
+                                        {filter === 'PAID' ? (
+                                            <>
+                                                <strong className={styles.customerCardTotal}>{formatCurrency(group.settledTotalCents)}</strong>
+                                                <span className={styles.customerCardCount}>{group.settledNotesCount} notinhas quitadas</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <strong className={styles.customerCardTotal}>{formatCurrency(group.openTotalCents - group.paidTotalCents)}</strong>
+                                                <span className={styles.customerCardCount}>{group.openNotesCount} notinhas pendentes</span>
+                                            </>
+                                        )}
                                     </div>
                                 </article>
                             ))}
@@ -299,50 +351,98 @@ export default function CreditNotesPage() {
 
             {selectedCustomer && (
                 <div className={styles.modalOverlay} onMouseDown={handleCloseModal}>
-                    <div className={styles.modalContent} onMouseDown={(e) => e.stopPropagation()}>
+                    <div
+                        className={styles.modalContent}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="credit-notes-dialog-title"
+                    >
                         <header className={styles.modalHeader}>
                             <div>
-                                <h2>{selectedCustomer.customerName}</h2>
-                                <p>Selecione as notinhas para quitar ou informe o valor parcial.</p>
+                                <h2 id="credit-notes-dialog-title">{selectedCustomer.customerName}</h2>
+                                <p>Veja o histórico de notinhas, atrasos e quitações, ou selecione notinhas em aberto para quitar.</p>
                             </div>
-                            <button onClick={handleCloseModal} className={styles.modalClose}>
+                            <button type="button" onClick={handleCloseModal} className={styles.modalClose} aria-label="Fechar notinhas">
                                 <X size={20} />
                             </button>
                         </header>
 
                         <div className={styles.modalBody}>
-                            <div className={styles.modalSection}>
-                                <h3>Notinhas em Aberto</h3>
-                                {selectedCustomer.notes.filter(n => n.status === 'OPEN').length === 0 ? (
-                                    <p style={{ color: 'var(--text-muted)' }}>Nenhuma notinha em aberto.</p>
-                                ) : (
-                                    selectedCustomer.notes.filter(n => n.status === 'OPEN').map(note => {
-                                        const isSelected = selectedNoteIds.has(note.id);
-                                        const amountNeeded = note.totalCents - note.paidCents;
-                                        return (
-                                            <div
-                                                key={note.id}
-                                                className={`${styles.selectableNote} ${isSelected ? styles.selectableNoteSelected : ''}`}
-                                                onClick={() => toggleNoteSelection(note.id)}
-                                            >
-                                                <div className={styles.checkIcon}>
-                                                    {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
-                                                </div>
-                                                <div className={styles.selectableNoteInfo}>
-                                                    <div className={styles.selectableNoteHeader}>
-                                                        <strong>{formatCurrency(amountNeeded)}</strong>
-                                                        <span>{formatDate(note.createdAt)}</span>
+                            {loadingCustomerNotes && !customerNotes ? (
+                                <p style={{ color: 'var(--text-muted)' }}>Carregando histórico...</p>
+                            ) : (
+                                <>
+                                    <div className={styles.modalSection}>
+                                        <h3>Notinhas em Aberto</h3>
+                                        {modalNotes.filter(n => n.status === 'OPEN').length === 0 ? (
+                                            <p style={{ color: 'var(--text-muted)' }}>Nenhuma notinha em aberto.</p>
+                                        ) : (
+                                            modalNotes.filter(n => n.status === 'OPEN').map(note => {
+                                                const isSelected = selectedNoteIds.has(note.id);
+                                                const amountNeeded = note.totalCents - note.paidCents;
+                                                return (
+                                                    <div
+                                                        key={note.id}
+                                                        className={`${styles.selectableNote} ${isSelected ? styles.selectableNoteSelected : ''}`}
+                                                        onClick={() => toggleNoteSelection(note.id)}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                                event.preventDefault();
+                                                                toggleNoteSelection(note.id);
+                                                            }
+                                                        }}
+                                                        role="checkbox"
+                                                        aria-checked={isSelected}
+                                                        tabIndex={0}
+                                                    >
+                                                        <div className={styles.checkIcon}>
+                                                            {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                        </div>
+                                                        <div className={styles.selectableNoteInfo}>
+                                                            <div className={styles.selectableNoteHeader}>
+                                                                <strong>{formatCurrency(amountNeeded)}</strong>
+                                                                <span>{formatDate(note.createdAt)}</span>
+                                                            </div>
+                                                            <span>Pedido #{note.order.id.slice(-6).toUpperCase()} • {note.order.items.length} itens</span>
+                                                            <span>Vencimento: {formatDate(note.dueAt)}</span>
+                                                            {note.isOverdue && (
+                                                                <span style={{ color: '#a63f27', fontWeight: 700 }}>Vencida</span>
+                                                            )}
+                                                            {note.paidCents > 0 && (
+                                                                <span style={{ color: '#047857', fontWeight: 600 }}>Parcialmente paga: {formatCurrency(note.paidCents)}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <span>Pedido #{note.order.id.slice(-6).toUpperCase()} • {note.order.items.length} itens</span>
-                                                    {note.paidCents > 0 && (
-                                                        <span style={{ color: '#047857', fontWeight: 600 }}>Parcialmente paga: {formatCurrency(note.paidCents)}</span>
-                                                    )}
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    <div className={styles.modalSection}>
+                                        <h3>Histórico de Quitações</h3>
+                                        {modalNotes.filter(n => n.status === 'PAID').length === 0 ? (
+                                            <p style={{ color: 'var(--text-muted)' }}>Nenhuma notinha quitada ainda.</p>
+                                        ) : (
+                                            modalNotes.filter(n => n.status === 'PAID').map(note => (
+                                                <div key={note.id} className={styles.selectableNote} style={{ cursor: 'default' }}>
+                                                    <div className={styles.selectableNoteInfo}>
+                                                        <div className={styles.selectableNoteHeader}>
+                                                            <strong style={{ color: '#047857' }}>{formatCurrency(note.totalCents)}</strong>
+                                                            <span>Quitada em {formatDate(note.settledAt)}</span>
+                                                        </div>
+                                                        <span>Pedido #{note.order.id.slice(-6).toUpperCase()} • {note.order.items.length} itens</span>
+                                                        <span>
+                                                            {note.settledPaymentMethod === 'CASH' ? 'Pago em dinheiro' : note.settledPaymentMethod === 'PIX' ? 'Pago no Pix' : note.settledPaymentMethod === 'CARD' ? 'Pago no cartão' : 'Método não registrado'}
+                                                            {note.settledBy ? ` • Recebido por ${note.settledBy.name}` : ''}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </>
+                            )}
 
                             {selectedNoteIds.size > 0 && (
                                 <div className={styles.modalSection}>
@@ -350,6 +450,7 @@ export default function CreditNotesPage() {
                                     <div className={styles.amountInputRow}>
                                         <input
                                             type="text"
+                                            inputMode="decimal"
                                             className={styles.amountInput}
                                             value={customAmountStr}
                                             onChange={(e) => setCustomAmountStr(e.target.value.replace(/[^0-9.,]/g, ''))}

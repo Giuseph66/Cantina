@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, LogIn } from 'lucide-react';
 import styles from './CashPage.module.css';
 import { CashierLayout } from '../../components/cashier/CashierLayout';
+import { useDialog } from '../../components/DialogProvider';
 import { useCashSession } from '../../hooks/useCashSession';
 
 export default function CashOpenPage() {
     const api = useApi();
     const navigate = useNavigate();
     const { hasOpenSession, isLoading: isCashLoading } = useCashSession();
+    const { alert: showAlert } = useDialog();
     const [openingCentsStr, setOpeningCentsStr] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -23,17 +25,17 @@ export default function CashOpenPage() {
         e.preventDefault();
         const val = parseFloat(openingCentsStr.replace(',', '.'));
         if (isNaN(val) || val < 0) {
-            alert('Valor inválido. Use um valor numérico válido (ex: 50.00)');
+        await showAlert('Valor inválido. Use um valor numérico válido (ex: 50,00).', { tone: 'warning' });
             return;
         }
 
         setLoading(true);
         try {
             await api.post('/cash/open', { openingCashCents: Math.round(val * 100) });
-            alert('Caixa aberto com sucesso!');
+            await showAlert('Caixa aberto com sucesso!', { tone: 'success' });
             navigate('/cashier/scan');
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setLoading(false);
         }

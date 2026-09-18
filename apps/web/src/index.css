@@ -36,6 +36,11 @@
 
     --transition-fast: 0.2s ease;
     --transition-normal: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 /* ── Dark Theme ───────────────────────────────────────────────────────────── */
@@ -88,6 +93,12 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
+html { min-height: 100%; }
+
+#root {
+    min-height: 100dvh;
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: var(--bg-main);
@@ -97,5 +108,5 @@ body {
     color: var(--text-main);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    min-height: 100vh;
+    min-height: 100dvh;
 }

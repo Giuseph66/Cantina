@@ -5,6 +5,7 @@ import { AlertTriangle, Banknote, Check, CreditCard, QrCode, ReceiptText, Shield
 import styles from './ValidationDetailPage.module.css';
 import { CashierLayout } from '../../components/cashier/CashierLayout';
 import { OfflineStorage } from '../../services/OfflineStorage';
+import { useDialog } from '../../components/DialogProvider';
 
 function formatCurrency(cents: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -40,6 +41,7 @@ export default function ValidationDetailPage() {
     const { state } = useLocation();
     const navigate = useNavigate();
     const api = useApi();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
 
     const code = state?.code as string;
     // Pega as variaveis pré injetadas via SCAN ou manual API calls
@@ -82,7 +84,7 @@ export default function ValidationDetailPage() {
     async function handleMarkPaid() {
         if (!data) return;
         if (isOfflineMode) {
-            alert('Não é possível dar baixa em pagamentos na catraca Offline. É exigido internet.');
+            await showAlert('Não é possível dar baixa em pagamentos na catraca Offline. É exigido internet.', { tone: 'warning' });
             return;
         }
 
@@ -91,7 +93,7 @@ export default function ValidationDetailPage() {
             await api.post('/tickets/mark-paid', { ticketId: data.ticket.id });
             setData({ ...data, order: { ...data.order, status: 'PAID' } });
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setActionLoading(false);
         }
@@ -100,7 +102,7 @@ export default function ValidationDetailPage() {
     async function handleMarkPending() {
         if (!data) return;
         if (isOfflineMode) {
-            alert('Não é possível alterar o status em modo offline.');
+            await showAlert('Não é possível alterar o status em modo offline.', { tone: 'warning' });
             return;
         }
 
@@ -110,7 +112,7 @@ export default function ValidationDetailPage() {
             setData({ ...data, order: { ...data.order, ...updatedOrder } });
             setShowCreditForm(false);
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setActionLoading(false);
         }
@@ -119,12 +121,12 @@ export default function ValidationDetailPage() {
     async function handleMoveToCredit() {
         if (!data) return;
         if (isOfflineMode) {
-            alert('Não é possível lançar notinha em modo offline.');
+            await showAlert('Não é possível lançar notinha em modo offline.', { tone: 'warning' });
             return;
         }
 
         if (!data.order.user && !creditCustomerName.trim()) {
-            alert('Informe o nome do cliente para lançar na notinha.');
+            await showAlert('Informe o nome do cliente para lançar na notinha.', { tone: 'warning' });
             return;
         }
 
@@ -140,7 +142,7 @@ export default function ValidationDetailPage() {
             setData({ ...data, order: { ...data.order, ...updatedOrder } });
             setShowCreditForm(false);
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setActionLoading(false);
         }
@@ -150,7 +152,7 @@ export default function ValidationDetailPage() {
         if (!data) return;
 
         const confirmMsg = alreadyConsumed ? 'Re-confirmar (ESTE TICKET JÁ FOI LIDO ANTES)?' : 'Confirmar Retirada do Pedido?';
-        if (!window.confirm(confirmMsg)) return;
+        if (!await showConfirm(confirmMsg, { confirmLabel: alreadyConsumed ? 'Reconfirmar' : 'Confirmar retirada' })) return;
 
         setActionLoading(true);
         try {
@@ -158,7 +160,7 @@ export default function ValidationDetailPage() {
                 // CONSUMO OFFLINE (BANCO LOCAL)
                 await OfflineStorage.markTicketConsumedLocally(data.ticket.id);
                 await OfflineStorage.enqueueConsumption(data.ticket.id);
-                alert('Consumido LOCALMENTE.\nSerá enviado pra nuvem na próxima vez que conectar.');
+                await showAlert('Consumido localmente.\nSerá enviado para a nuvem quando a conexão voltar.', { tone: 'success' });
                 navigate('/cashier/scan');
                 return;
             }
@@ -166,7 +168,7 @@ export default function ValidationDetailPage() {
             await api.post('/tickets/consume', { ticketId: data.ticket.id });
             navigate('/cashier/scan');
         } catch (err: any) {
-            alert(err.message || 'Erro ao comunicar consumo.');
+            await showAlert(err.message || 'Erro ao comunicar consumo.', { tone: 'error' });
             setActionLoading(false);
         }
     }

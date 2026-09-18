@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { Plus, Edit2, Trash2, X, List } from 'lucide-react';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { useDialog } from '../../components/DialogProvider';
 import styles from './Admin.module.css';
 
 interface Category { id: string; name: string; sortOrder: number; isActive: boolean; }
 
 export default function CategoriesPage() {
     const api = useApi();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -45,12 +47,12 @@ export default function CategoriesPage() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
+        if (!await showConfirm(`Tem certeza que deseja excluir "${name}"?`)) return;
         try {
             await api.delete(`/admin/categories/${id}`);
             setCategories(prev => prev.filter(c => c.id !== id));
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         }
     };
 
@@ -66,7 +68,7 @@ export default function CategoriesPage() {
             setIsModalOpen(false);
             fetchData();
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSaving(false);
         }

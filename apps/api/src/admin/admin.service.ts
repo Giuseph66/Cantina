@@ -145,6 +145,7 @@ export class AdminService {
             categoryId: product.categoryId,
             imageUrl: this.uploadsService.normalizePublicUrl(product.imageUrl),
             isSpecialToday: product.isSpecialToday,
+            weeklySpecialDay: product.weeklySpecialDay,
             isActive: product.isActive,
             stockMode: product.stockMode,
             stockQty: product.stockQty,

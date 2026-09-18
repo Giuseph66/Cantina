@@ -4,7 +4,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    padding: 0.75rem 0;
+    padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 0 0.75rem;
     width: 100%;
 }
 
@@ -216,7 +216,7 @@
 
 @media (max-width: 768px) {
     .header {
-        padding: 0.5rem 0;
+        padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0 0.5rem;
         box-shadow: none;
         border-bottom: 1px solid var(--glass-border);
     }

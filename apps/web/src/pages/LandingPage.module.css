@@ -1,5 +1,5 @@
 .container {
-    min-height: 100vh;
+    min-height: 100dvh;
     background-color: #F8F9FA;
     display: flex;
     flex-direction: column;
@@ -437,6 +437,19 @@
     letter-spacing: 0.05em;
 }
 
+.weekdayBadge {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    background: var(--primary);
+    color: white;
+    padding: 0.3rem 0.65rem;
+    font-weight: 800;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+}
+
 .productInfo {
     display: flex;
     flex-direction: column;
@@ -552,7 +565,7 @@
 /* --- MOBILE SPECIFICS (Mobile-First Enhancements) --- */
 .mobileFloatingCart {
     position: fixed;
-    bottom: 2.5rem;
+    bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
     left: 0;
     right: 0;
     margin: 0 auto;
@@ -885,7 +898,7 @@
 
     /* Floating Cart for Mobile adjustment */
     .mobileFloatingCart {
-        bottom: 1.5rem;
+        bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
         left: 1rem;
         right: 1rem;
         width: auto;
@@ -923,6 +936,7 @@
     z-index: 1000;
     display: flex;
     align-items: flex-end;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     /* Bottom sheet on mobile, centered on desktop */
     justify-content: center;
     animation: fadeIn 0.2s ease;
@@ -932,11 +946,12 @@
     background: white;
     width: 100%;
     max-width: 500px;
-    max-height: 90vh;
+    max-height: 90dvh;
     border-radius: 20px 20px 0 0;
     position: relative;
     display: flex;
     flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -948,7 +963,7 @@
 
     .modalContent {
         border-radius: 24px;
-        max-height: 85vh;
+        max-height: 85dvh;
         overflow-y: hidden;
     }
 }

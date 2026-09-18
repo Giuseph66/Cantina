@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Edit2, Plus, Trash2, X } from 'lucide-react';
 import { useApi } from '../../hooks/useApi';
+import { useDialog } from '../DialogProvider';
 import styles from '../../pages/admin/Admin.module.css';
 
 interface Category {
@@ -30,6 +31,7 @@ export function CategoriesManagerModal({
     onClose: () => void;
 }) {
     const api = useApi();
+    const { alert: showAlert, confirm: showConfirm } = useDialog();
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -109,7 +111,7 @@ export function CategoriesManagerModal({
     }
 
     async function handleDelete(id: string, name: string) {
-        if (!window.confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
+        if (!await showConfirm(`Tem certeza que deseja excluir "${name}"?`)) return;
 
         try {
             await api.delete(`/admin/categories/${id}`);
@@ -118,7 +120,7 @@ export function CategoriesManagerModal({
                 resetToCreateMode();
             }
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         }
     }
 
@@ -137,7 +139,7 @@ export function CategoriesManagerModal({
             setCategories(refreshed);
             resetToCreateMode();
         } catch (err: any) {
-            alert(err.message);
+            await showAlert(err.message, { tone: 'error' });
         } finally {
             setSaving(false);
         }
