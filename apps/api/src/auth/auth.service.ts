@@ -260,14 +260,24 @@ export class AuthService {
             }
         }
 
+        const hasAddress = dto.postalCode !== undefined || dto.addressNumber !== undefined;
+        if (hasAddress && (!dto.postalCode || !dto.addressNumber?.trim())) {
+            throw new BadRequestException('Informe CEP e número do endereço.');
+        }
+
         const updated = await this.prisma.user.update({
             where: { id: userId },
-            data: { cpf, phone },
+            data: {
+                cpf,
+                phone,
+                ...(hasAddress ? { postalCode: dto.postalCode, addressNumber: dto.addressNumber!.trim() } : {}),
+            },
         });
 
         await this.audit.log(userId, 'AUTH_PROFILE_UPDATED', 'User', userId, {
             cpfChanged: currentUser.cpf !== cpf,
             phoneChanged: currentUser.phone !== phone,
+            addressChanged: hasAddress,
         });
 
         return this.serializeUser(updated);

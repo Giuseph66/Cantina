@@ -7,8 +7,11 @@ import { AsaasClient, AsaasPayment, AsaasRequestError } from './asaas.client';
 
 const CLOSED_ORDERS = ['CANCELLED', 'EXPIRED'];
 const PAYABLE_ORDERS = ['CREATED', 'CONFIRMED'];
-const MIN_CARD_PAYMENT_CENTS = 500;
-type Payer = { id: string; name: string; email: string; cpf: string | null; phone: string | null };
+const MIN_PAYMENT_CENTS = 500;
+type Payer = {
+    id: string; name: string; email: string; cpf: string | null; phone: string | null;
+    postalCode: string | null; addressNumber: string | null;
+};
 
 @Injectable()
 export class AsaasPaymentsService {
@@ -32,8 +35,8 @@ export class AsaasPaymentsService {
         const reserved = await this.prisma.$transaction(async tx => {
             const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, ticket: true } });
             if (!PAYABLE_ORDERS.includes(order.status)) throw new ConflictException('Este pedido não aceita novos pagamentos.');
-            if (method === 'CARD' && order.totalCents < MIN_CARD_PAYMENT_CENTS) {
-                throw new BadRequestException('O pagamento com cartão exige pedido mínimo de R$ 5,00. Use Pix ou adicione mais itens.');
+            if (order.totalCents < MIN_PAYMENT_CENTS) {
+                throw new BadRequestException('O pagamento pelo Asaas exige pedido mínimo de R$ 5,00. Adicione mais itens ou pague no balcão.');
             }
             const existing = await tx.paymentTransaction.findFirst({
                 where: { orderId, OR: [{ status: 'PENDING' }, { activeOrderId: orderId }] }, orderBy: { createdAt: 'asc' },
@@ -62,6 +65,7 @@ export class AsaasPaymentsService {
             submitted = true;
             const remote = await this.client.createPayment({ customer, method, amountCents: reserved.payment.amountCents,
                 reference: reserved.payment.externalReference!, orderId });
+            if (remote.callbackRejected) this.logger.warn(`payment_callback_rejected ${id} asaas=${JSON.stringify(remote.callbackErrors ?? [])}`);
             // Record the remote ID before fetching QR details or applying the financial result.
             await this.prisma.paymentTransaction.update({ where: { id }, data: { externalId: remote.id, creationState: 'CREATED' } });
             await this.apply(id, remote);
@@ -79,7 +83,8 @@ export class AsaasPaymentsService {
             } else {
                 await this.prisma.paymentTransaction.update({ where: { id }, data: { lastError: 'Pagamento criado; aguardando atualização dos dados.' } });
             }
-            this.logger.warn(`payment_attempt ${id} ${definitive ? 'failed' : 'awaiting_reconciliation'}`);
+            const details = error instanceof AsaasRequestError && error.details.length ? ` asaas=${JSON.stringify(error.details)}` : '';
+            this.logger.warn(`payment_attempt ${id} ${definitive ? 'failed' : 'awaiting_reconciliation'}${details}`);
         }
         return this.prisma.paymentTransaction.findUniqueOrThrow({ where: { id } });
     }
@@ -96,7 +101,10 @@ export class AsaasPaymentsService {
                 customer = await this.prisma.asaasCustomer.findUniqueOrThrow({ where: { userId_environment_accountRef: key } });
             }
         }
-        if (customer.externalId) return customer.externalId;
+        if (customer.externalId) {
+            await this.syncCustomerAddress(customer.id, customer.externalId, customer.addressSyncKey, payer);
+            return customer.externalId;
+        }
         const reference = `cantina:user:${payer.id}`;
         let matches: { data: { id: string; cpfCnpj: string }[]; hasMore: boolean };
         try {
@@ -120,6 +128,7 @@ export class AsaasPaymentsService {
                 const created = await this.client.request<{ id: string }>('/customers', 'POST', {
                     name: payer.name, email: payer.email, cpfCnpj: cpf, mobilePhone: payer.phone!.replace(/\D/g, ''),
                     externalReference: reference, notificationDisabled: true,
+                    ...this.addressPayload(payer),
                 });
                 remoteId = created.id;
             } catch (error) {
@@ -130,8 +139,34 @@ export class AsaasPaymentsService {
             }
         }
         if (!remoteId) throw new Error('Resposta de cadastro inválida.');
-        await this.prisma.asaasCustomer.update({ where: { id: customer.id }, data: { externalId: remoteId, creationState: 'CREATED' } });
+        await this.prisma.asaasCustomer.update({ where: { id: customer.id }, data: {
+            externalId: remoteId, creationState: 'CREATED', addressSyncKey: this.addressKey(payer),
+        } });
         return remoteId;
+    }
+
+    private addressKey(payer: Payer) {
+        const cep = payer.postalCode?.replace(/\D/g, '');
+        const number = payer.addressNumber?.trim();
+        return cep && number ? `${cep}:${number}` : null;
+    }
+
+    private addressPayload(payer: Payer) {
+        const key = this.addressKey(payer);
+        return key ? { postalCode: payer.postalCode!.replace(/\D/g, ''), addressNumber: payer.addressNumber!.trim() } : {};
+    }
+
+    // Falha aqui não bloqueia o pagamento: a página hospedada apenas volta a pedir o endereço.
+    private async syncCustomerAddress(localId: string, remoteId: string, syncedKey: string | null, payer: Payer) {
+        const key = this.addressKey(payer);
+        if (!key || key === syncedKey) return;
+        try {
+            await this.client.request(`/customers/${encodeURIComponent(remoteId)}`, 'PUT', this.addressPayload(payer));
+            await this.prisma.asaasCustomer.update({ where: { id: localId }, data: { addressSyncKey: key } });
+        } catch (error) {
+            const details = error instanceof AsaasRequestError && error.details.length ? ` asaas=${JSON.stringify(error.details)}` : '';
+            this.logger.warn(`customer_address_sync_failed ${localId}${details}`);
+        }
     }
 
     async reconcile(payment: PaymentTransaction) {

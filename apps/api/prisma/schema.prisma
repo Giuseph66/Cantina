@@ -31,6 +31,8 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   cpf           String?   @unique
   phone         String?   @map("phone")
+  postalCode    String?   @map("postal_code")
+  addressNumber String?   @map("address_number")
   role          String    @default("CLIENT")
   isActive      Boolean   @default(true) @map("is_active")
   lastLoginAt   DateTime? @map("last_login_at")
@@ -207,6 +209,7 @@ model AsaasCustomer {
   accountRef    String   @map("account_ref")
   externalId    String?  @map("external_id")
   creationState String   @default("CREATING") @map("creation_state")
+  addressSyncKey String? @map("address_sync_key")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

@@ -14,10 +14,12 @@ export type AsaasPayment = {
     paymentDate?: string;
     confirmedDate?: string;
     refunds?: { status: string; value: number }[];
+    callbackRejected?: boolean;
+    callbackErrors?: string[];
 };
 
 export class AsaasRequestError extends Error {
-    constructor(readonly status: number, readonly definitive: boolean) {
+    constructor(readonly status: number, readonly definitive: boolean, readonly details: string[] = []) {
         super(status ? `Asaas HTTP ${status}` : 'Asaas indisponível; resultado da requisição desconhecido');
     }
 }
@@ -74,11 +76,19 @@ export class AsaasClient {
             });
         } catch { throw new AsaasRequestError(0, false); }
         if (!response.ok) {
-            // Never include gateway bodies, request headers or payer data in errors/logs.
-            throw new AsaasRequestError(response.status, [400, 401, 403, 404, 422].includes(response.status));
+            // Only Asaas error codes/descriptions are surfaced, and only outside production; never bodies or payer data.
+            const details = process.env.NODE_ENV === 'production' ? [] : await this.readErrorDetails(response);
+            throw new AsaasRequestError(response.status, [400, 401, 403, 404, 422].includes(response.status), details);
         }
         try { return await response.json() as T; }
         catch { throw new AsaasRequestError(response.status, false); }
+    }
+
+    private async readErrorDetails(response: Response): Promise<string[]> {
+        try {
+            const body = await response.json() as { errors?: { code?: string; description?: string }[] };
+            return (body.errors ?? []).map(e => `${e.code ?? '?'}: ${e.description ?? ''}`.trim()).slice(0, 5);
+        } catch { return []; }
     }
 
     getPayment(id: string) { return this.request<AsaasPayment>(`/payments/${encodeURIComponent(id)}`); }
@@ -99,7 +109,7 @@ export class AsaasClient {
 
     async createPayment(input: { customer: string; method: 'PIX' | 'CARD'; amountCents: number; reference: string; orderId: string }) {
         const dueDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-        const callbackBaseUrl = process.env.ASAAS_CALLBACK_SUCCESS_URL?.trim();
+        const callbackBaseUrl = (process.env.ASAAS_CALLBACK_SUCCESS_URL || process.env.APP_PUBLIC_URL)?.trim();
         const payment = {
             customer: input.customer,
             billingType: input.method === 'CARD' ? 'CREDIT_CARD' : 'PIX',
@@ -112,12 +122,21 @@ export class AsaasClient {
             let callbackUrl: URL;
             try { callbackUrl = new URL(callbackBaseUrl); }
             catch { throw new ServiceUnavailableException('URL de retorno Asaas inválida.'); }
-            if (callbackUrl.protocol !== 'https:' || callbackUrl.username || callbackUrl.password) {
+            const isLocalDev = process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1'].includes(callbackUrl.hostname);
+            if ((callbackUrl.protocol !== 'https:' && !isLocalDev) || callbackUrl.username || callbackUrl.password) {
                 throw new ServiceUnavailableException('URL de retorno Asaas deve usar HTTPS.');
             }
             payment.callback = { successUrl: `${callbackUrl.href.replace(/\/$/, '')}/order/${encodeURIComponent(input.orderId)}`, autoRedirect: true };
         }
-        return this.request<AsaasPayment>('/payments', 'POST', payment);
+        try {
+            return await this.request<AsaasPayment>('/payments', 'POST', payment);
+        } catch (error) {
+            // Asaas rejeita o callback quando o domínio não está cadastrado na conta; 400 garante que nada foi criado.
+            if (!payment.callback || !(error instanceof AsaasRequestError) || error.status !== 400) throw error;
+            delete payment.callback;
+            const created = await this.request<AsaasPayment>('/payments', 'POST', payment);
+            return { ...created, callbackRejected: true, callbackErrors: error.details };
+        }
     }
 
     safeInvoiceUrl(value?: string): string | null {

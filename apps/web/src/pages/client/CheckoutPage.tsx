@@ -27,6 +27,7 @@ type PaymentConfig = {
     allowOnPickupPayment: boolean;
     onlineEnabled: boolean;
     pixEnabled: boolean;
+    pixProvider?: string;
     cardEnabled: boolean;
     cardProvider?: string;
     cardFlow?: string;
@@ -92,6 +93,11 @@ function isValidCpf(value: string) {
 
     return calculateDigit(cpf.slice(0, 9), 10) === Number(cpf[9])
         && calculateDigit(cpf.slice(0, 10), 11) === Number(cpf[10]);
+}
+
+function formatPostalCode(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
 }
 
 function normalizePhone(value: string) {
@@ -163,6 +169,8 @@ export default function CheckoutPage() {
     const [payerEmail, setPayerEmail] = useState(user?.email ?? '');
     const [payerDocument, setPayerDocument] = useState(user?.cpf ?? '');
     const [payerPhone, setPayerPhone] = useState(user?.phone ?? '');
+    const [payerPostalCode, setPayerPostalCode] = useState(user?.postalCode ?? '');
+    const [payerAddressNumber, setPayerAddressNumber] = useState(user?.addressNumber ?? '');
     const onlineMethodRef = useRef<OnlineMethod>('PIX');
 
     const paymentSummary = latestPayment ?? onlineOrder?.latestPayment ?? null;
@@ -177,7 +185,8 @@ export default function CheckoutPage() {
         (checkoutMethod === 'ONLINE' && !config.onlineEnabled)
         || (checkoutMethod === 'ON_PICKUP' && !config.allowOnPickupPayment);
     const canCreateOrder = !isResumingOrder && items.length > 0 && !creatingOrder && !loadingConfig && !checkoutUnavailable && pode_vender;
-    const canGeneratePix = !!onlineOrder && config.pixEnabled && !processingPayment && config.newChargesEnabled !== false;
+    const pixBelowMinimum = !!onlineOrder && config.pixProvider === 'ASAAS' && onlineOrder.totalCents < 500;
+    const canGeneratePix = !!onlineOrder && config.pixEnabled && !pixBelowMinimum && !processingPayment && config.newChargesEnabled !== false;
     const cardBelowMinimum = !!onlineOrder && onlineOrder.totalCents < 500;
     const canPayCard = !!onlineOrder && config.cardEnabled && !cardBelowMinimum && !processingPayment && config.newChargesEnabled !== false;
 
@@ -328,7 +337,9 @@ export default function CheckoutPage() {
         setPayerEmail(user?.email ?? '');
         setPayerDocument(user?.cpf ?? '');
         setPayerPhone(user?.phone ?? '');
-    }, [user?.name, user?.email, user?.cpf, user?.phone]);
+        setPayerPostalCode(user?.postalCode ?? '');
+        setPayerAddressNumber(user?.addressNumber ?? '');
+    }, [user?.name, user?.email, user?.cpf, user?.phone, user?.postalCode, user?.addressNumber]);
 
     useEffect(() => {
         if (!onlineOrder) return;
@@ -384,9 +395,11 @@ export default function CheckoutPage() {
 
     const profileNeedsCompletion = !user?.isProfileComplete;
 
-    async function ensureProfileReady() {
+    async function ensureProfileReady(options: { requireAddress?: boolean } = {}) {
         const normalizedCpf = normalizeTaxId(payerDocument);
         const normalizedPhone = normalizePhone(payerPhone);
+        const normalizedPostalCode = payerPostalCode.replace(/\D/g, '');
+        const normalizedAddressNumber = payerAddressNumber.trim();
 
         if (!isValidCpf(normalizedCpf)) {
             throw new Error('Informe um CPF válido para continuar.');
@@ -396,15 +409,32 @@ export default function CheckoutPage() {
             throw new Error('Informe um celular válido com DDD para continuar.');
         }
 
-        if (user?.cpf === normalizedCpf && user?.phone === normalizedPhone && user.isProfileComplete) {
+        if (options.requireAddress) {
+            if (normalizedPostalCode.length !== 8) {
+                throw new Error('Informe um CEP válido com 8 dígitos para pagar com cartão.');
+            }
+            if (!normalizedAddressNumber) {
+                throw new Error('Informe o número do endereço para pagar com cartão.');
+            }
+        }
+
+        const addressProvided = normalizedPostalCode.length === 8 && !!normalizedAddressNumber;
+        const addressUnchanged = user?.postalCode === normalizedPostalCode && user?.addressNumber === normalizedAddressNumber;
+        if (user?.cpf === normalizedCpf && user?.phone === normalizedPhone && user.isProfileComplete && (!addressProvided || addressUnchanged)) {
             return;
         }
 
         setSavingProfile(true);
         try {
-            const updatedUser = await updateProfile(normalizedCpf, normalizedPhone);
+            const updatedUser = await updateProfile(
+                normalizedCpf,
+                normalizedPhone,
+                addressProvided ? { postalCode: normalizedPostalCode, addressNumber: normalizedAddressNumber } : undefined,
+            );
             setPayerDocument(updatedUser.cpf ?? normalizedCpf);
             setPayerPhone(updatedUser.phone ?? normalizedPhone);
+            setPayerPostalCode(updatedUser.postalCode ?? normalizedPostalCode);
+            setPayerAddressNumber(updatedUser.addressNumber ?? normalizedAddressNumber);
         } finally {
             setSavingProfile(false);
         }
@@ -481,6 +511,7 @@ export default function CheckoutPage() {
             }
             setProcessingPayment(true);
             setError('');
+            await ensureProfileReady({ requireAddress: true });
             const payment = await api.post<PaymentResponse>(`/payments/orders/${onlineOrder.id}/card`, {});
             setLatestPayment(payment);
             if (payment.status === 'APPROVED') { navigate(`/order/${onlineOrder.id}`); return; }
@@ -588,6 +619,7 @@ export default function CheckoutPage() {
                                             className={styles.input}
                                             value={payerName}
                                             placeholder="Nome completo"
+                                            autoComplete="name"
                                             readOnly
                                         />
                                     </label>
@@ -598,6 +630,7 @@ export default function CheckoutPage() {
                                             type="email"
                                             value={payerEmail}
                                             placeholder="voce@exemplo.com"
+                                            autoComplete="email"
                                             readOnly
                                         />
                                     </label>
@@ -609,6 +642,8 @@ export default function CheckoutPage() {
                                             onChange={(event) => setPayerDocument(formatTaxId(event.target.value))}
                                             placeholder="000.000.000-00"
                                             inputMode="numeric"
+                                            autoComplete="off"
+                                            maxLength={18}
                                         />
                                     </label>
                                     <label className={styles.field}>
@@ -620,6 +655,7 @@ export default function CheckoutPage() {
                                             onChange={(event) => setPayerPhone(event.target.value)}
                                             placeholder="65999999999"
                                             inputMode="tel"
+                                            autoComplete="tel"
                                         />
                                     </label>
                                 </div>
@@ -743,6 +779,7 @@ export default function CheckoutPage() {
     function renderOnlinePayment() {
         if (!onlineOrder) return null;
         const shouldShowProfileFields = profileNeedsCompletion;
+        const addressNeedsCompletion = !user?.postalCode || !user?.addressNumber;
 
         return (
             <>
@@ -769,6 +806,7 @@ export default function CheckoutPage() {
                                         className={styles.input}
                                         value={payerName}
                                         placeholder="Nome completo"
+                                        autoComplete="name"
                                         readOnly
                                     />
                                 </label>
@@ -780,6 +818,7 @@ export default function CheckoutPage() {
                                         type="email"
                                         value={payerEmail}
                                         placeholder="voce@exemplo.com"
+                                        autoComplete="email"
                                         readOnly
                                     />
                                 </label>
@@ -791,6 +830,9 @@ export default function CheckoutPage() {
                                         value={formatTaxId(payerDocument)}
                                         onChange={(event) => setPayerDocument(formatTaxId(event.target.value))}
                                         placeholder="000.000.000-00"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        maxLength={18}
                                     />
                                 </label>
                                 <label className={styles.field}>
@@ -801,6 +843,8 @@ export default function CheckoutPage() {
                                         value={payerPhone}
                                         onChange={(event) => setPayerPhone(event.target.value)}
                                         placeholder="(65) 99999-9999"
+                                        inputMode="tel"
+                                        autoComplete="tel"
                                     />
                                 </label>
                             </div>
@@ -822,14 +866,14 @@ export default function CheckoutPage() {
                         <div className={styles.paymentOptions}>
                             {config.pixEnabled && (
                                 <label
-                                    className={`${styles.option} ${onlineMethod === 'PIX' ? styles.activeOption : ''}`}
+                                    className={`${styles.option} ${onlineMethod === 'PIX' ? styles.activeOption : ''} ${pixBelowMinimum ? styles.optionDisabled : ''}`}
                                 >
                                     <QrCode size={22} color={onlineMethod === 'PIX' ? 'var(--secondary)' : 'var(--text-dim)'} />
                                     <div className={styles.paymentTextBlock}>
                                         <span className={styles.paymentLabel}>Pix</span>
                                         <span className={styles.paymentHint}>Copie o código e pague no app do seu banco.</span>
                                     </div>
-                                    <input type="radio" name="online-payment-method" aria-label="Pix" checked={onlineMethod === 'PIX'} onChange={() => setOnlineMethod('PIX')} />
+                                    <input type="radio" name="online-payment-method" aria-label="Pix" checked={onlineMethod === 'PIX'} onChange={() => setOnlineMethod('PIX')} disabled={pixBelowMinimum} />
                                 </label>
                             )}
 
@@ -847,11 +891,48 @@ export default function CheckoutPage() {
                             )}
                         </div>
 
-                        {cardBelowMinimum && (
+                        {pixBelowMinimum && cardBelowMinimum && (
+                            <p className={styles.inlineHint}>Pagamento online exige pedido mínimo de R$ 5,00. Adicione mais itens ou pague no balcão.</p>
+                        )}
+                        {pixBelowMinimum && !cardBelowMinimum && (
+                            <p className={styles.inlineHint}>Pix disponível a partir de R$ 5,00. Para este pedido, use Cartão ou adicione mais itens.</p>
+                        )}
+                        {cardBelowMinimum && !pixBelowMinimum && (
                             <p className={styles.inlineHint}>Cartão disponível a partir de R$ 5,00. Para este pedido, use Pix ou adicione mais itens.</p>
                         )}
 
                         {onlineMethod === 'PIX' && renderPixResult()}
+
+                        {onlineMethod === 'CARD' && addressNeedsCompletion && (
+                            <div className={styles.fieldGrid}>
+                                <label className={styles.field}>
+                                    <span>CEP do titular</span>
+                                    <input
+                                        className={styles.input}
+                                        value={formatPostalCode(payerPostalCode)}
+                                        onChange={(event) => setPayerPostalCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                                        placeholder="00000-000"
+                                        inputMode="numeric"
+                                        autoComplete="postal-code"
+                                        maxLength={9}
+                                    />
+                                </label>
+                                <label className={styles.field}>
+                                    <span>Número</span>
+                                    <input
+                                        className={styles.input}
+                                        value={payerAddressNumber}
+                                        onChange={(event) => setPayerAddressNumber(event.target.value.slice(0, 10))}
+                                        placeholder="Ex: 123"
+                                        autoComplete="address-line2"
+                                        maxLength={10}
+                                    />
+                                </label>
+                                <p className={styles.inlineHint} style={{ gridColumn: '1 / -1' }}>
+                                    Só CEP e número: a operadora do cartão exige o endereço do titular. Pedimos uma vez e salvamos no seu cadastro.
+                                </p>
+                            </div>
+                        )}
 
                         {onlineMethod === 'CARD' && hostedCard && (
                             <div className={styles.statusCard}>

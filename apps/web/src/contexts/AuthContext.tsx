@@ -19,7 +19,14 @@ export interface AuthUser {
     emailVerified: boolean;
     cpf: string | null;
     phone: string | null;
+    postalCode: string | null;
+    addressNumber: string | null;
     isProfileComplete: boolean;
+}
+
+export interface ProfileAddress {
+    postalCode: string;
+    addressNumber: string;
 }
 
 interface AuthContextValue {
@@ -28,7 +35,7 @@ interface AuthContextValue {
     login: (email: string, password: string) => Promise<AuthUser>;
     register: (name: string, email: string, password: string) => Promise<AuthUser>;
     loginWithGoogle: (credential: string) => Promise<AuthUser>;
-    updateProfile: (cpf: string, phone: string) => Promise<AuthUser>;
+    updateProfile: (cpf: string, phone: string, address?: ProfileAddress) => Promise<AuthUser>;
     logout: () => Promise<void>;
     refreshSession: () => Promise<void>;
 }
@@ -142,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return data.user;
     }, []);
 
-    const updateProfile = useCallback(async (cpf: string, phone: string) => {
+    const updateProfile = useCallback(async (cpf: string, phone: string, address?: ProfileAddress) => {
         const res = await fetch('/api/v1/auth/profile', {
             method: 'PATCH',
             headers: buildHeaders('PATCH', { 'Content-Type': 'application/json' }),
@@ -150,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({
                 cpf: cpf.replace(/\D/g, ''),
                 phone: phone.replace(/\D/g, ''),
+                ...(address ? { postalCode: address.postalCode.replace(/\D/g, ''), addressNumber: address.addressNumber.trim() } : {}),
             }),
         });
 
